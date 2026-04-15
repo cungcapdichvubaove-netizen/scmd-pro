@@ -1794,10 +1794,10 @@ app.all("/api/*", (req, res) => {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    const clientDistPath = path.join(process.cwd(), "dist", "client");
+    app.use(express.static(clientDistPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      res.sendFile(path.join(clientDistPath, "index.html"));
     });
   }
 

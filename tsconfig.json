@@ -4,26 +4,20 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "node",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    
+    // "lib" option removed as per user's complete file.
     /* Cấu hình Output - Quan trọng để Render chạy được */
     "outDir": "./dist",
     "noEmit": false,           // Phải để false để tạo ra file .js
     "allowJs": true,
-    "sourceMap": true,         // Giúp debug lỗi trên Render dễ hơn
-    
+    // "sourceMap" option removed as per user's complete file.
     /* Cấu hình Interop & Kiểm tra lỗi */
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
+    // "forceConsistentCasingInFileNames" option removed as per user's complete file.
     "strict": true,
     "skipLibCheck": true,
-    
     /* Cấu hình cho React/Vite */
     "jsx": "react-jsx",
     "isolatedModules": true,
-    "useDefineForClassFields": false,
-    "experimentalDecorators": true,
-
     /* Đường dẫn Alias */
     "paths": {
       "@/*": ["./src/*"]
@@ -31,11 +25,12 @@
   },
   "include": [
     "server.ts",      // File backend của bạn
-    "src/**/*",       // Code frontend
-    "vite.config.ts"  // Config của vite
+    "src/types/**/*.ts" // Chỉ include các file type cho backend
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "src/**/*.tsx", // Exclude frontend React files
+    "src/**/*.ts"   // Exclude frontend TS files (non-tsx)
   ]
 }

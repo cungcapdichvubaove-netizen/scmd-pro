@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "npm run clean && npm run build:frontend && npm run build:backend",
+    "build": "npm run build:frontend && npm run build:backend",
     "build:frontend": "vite build --outDir dist/client",
-    "build:backend": "tsc",
+    "build:backend": "npx esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
     "start": "node dist/server.js",
-    "clean": "rm -rf dist && mkdir -p dist",
+    "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

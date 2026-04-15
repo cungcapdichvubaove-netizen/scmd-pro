@@ -10,6 +10,7 @@
     "noEmit": false,           // Phải để false để tạo ra file .js
     "allowJs": true,
     // "sourceMap" option removed as per user's complete file.
+    "resolveJsonModule": true,
     /* Cấu hình Interop & Kiểm tra lỗi */
     "esModuleInterop": true,
     // "forceConsistentCasingInFileNames" option removed as per user's complete file.

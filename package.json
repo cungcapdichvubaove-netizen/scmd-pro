@@ -9,7 +9,7 @@
     "build:frontend": "vite build --outDir dist/client",
     "build:backend": "tsc",
     "start": "node dist/server.js",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist && mkdir -p dist",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

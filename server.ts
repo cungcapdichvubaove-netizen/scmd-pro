@@ -46,10 +46,21 @@ interface Tenant {
   is_active: boolean;
   provisioning_status: 'queued' | 'cloning_schema' | 'generating_ssl' | 'running_health_checks' | 'active';
   features_enabled: { patrol: boolean; attendance: boolean; ai_analytics: boolean };
+  ssl_enabled?: boolean;
+  is_first_login?: boolean;
   admin_password?: string;
   token_version: number;
   expiry_date: Date;
   created_at: Date;
+  security_director?: {
+    name: string;
+    phone: string;
+    location: string;
+  };
+  health_check?: {
+    tables_initialized: boolean;
+    timestamp: Date;
+  };
 }
 
 interface Staff {
@@ -88,6 +99,7 @@ interface PatrolLog {
   suspicionReason?: string;
   createdAt: Date;
   trustScore?: number;
+  timestamp?: string | Date;
 }
 
 interface Incident {
@@ -95,10 +107,25 @@ interface Incident {
   tenantId: string;
   title: string;
   description: string;
+  type?: string;
   severity: 'Thấp' | 'Trung bình' | 'Cao';
   status: string;
+  staffId?: string;
   location: { lat: number; lon: number };
   createdAt: Date;
+  timestamp?: string | Date;
+}
+
+interface MagicToken {
+  id: string;
+  token: string;
+  tenantId: string;
+  role?: string;
+  staffId?: string;
+  username?: string;
+  name?: string;
+  expiresAt: Date;
+  used: boolean;
 }
 
 // --- INFRASTRUCTURE HARDENING: SECRETS & LOGGING ---
@@ -150,14 +177,22 @@ const provisioningLimiter = rateLimit({
 });
 
 // --- ROLE NORMALIZATION UTILITY ---
-const normalizeRole = (input: any): 'guard' | 'tenant_admin' => {
+const normalizeRole = (input: any): 'guard' | 'tenant_admin' | 'super_admin' => {
   if (!input) return 'guard';
   const roleStr = String(input).toLowerCase().trim();
+  if (roleStr === 'super_admin' || roleStr === 'hệ thống') return 'super_admin';
   // Chỉ những giá trị này mới được coi là Admin
   if (['tenant_admin', 'admin', 'quản trị', 'quản trị viên'].includes(roleStr)) {
     return 'tenant_admin';
   }
   return 'guard';
+};
+
+const getRedirectUrl = (role: string): string => {
+  const norm = normalizeRole(role);
+  if (role === 'super_admin') return '/super-admin/dashboard/';
+  if (norm === 'tenant_admin') return '/admin/dashboard/';
+  return '/guard/app/';
 };
 
 // --- AUTH UTILS ---
@@ -326,7 +361,12 @@ async function startServer() {
         const q = query(collection(firestore, "notifications"), where("tenantId", "==", tenantId), orderBy("createdAt", "desc"));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      }
+      },
+      getById: async (id: string) => {
+        const docRef = doc(firestore, "notifications", id);
+        const docSnap = await getDoc(docRef);
+        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+      },
     },
     magic_tokens: {
       getValid: async (token: string) => {
@@ -341,7 +381,7 @@ async function startServer() {
         const data = docSnap.data();
         const expiresAt = data.expiresAt instanceof Timestamp ? data.expiresAt.toDate() : new Date(data.expiresAt);
         if (expiresAt < new Date()) return null;
-        return { id: docSnap.id, ...data };
+        return { id: docSnap.id, ...data } as MagicToken;
       },
       markAsUsed: async (id: string) => {
         const docRef = doc(firestore, "magic_tokens", id);
@@ -675,6 +715,9 @@ async function startServer() {
     reportIncident: (data: any) => {
       return db.saveIncident(data);
     },
+    recordAdminBenchmark: (tenantId: string, checkpointId: string, data: any) => {
+      return { success: true };
+    }
   };
 
   // --- INTERFACES (API Handlers / Django Ninja Style) ---
@@ -1504,7 +1547,7 @@ async function startServer() {
     // Mark as used immediately to prevent replay attacks
     await firestoreDb.magic_tokens.markAsUsed(magicData.id);
     
-    const role = normalizeRole(magicData.role || (magicData.tenantId === 'system' ? 'super_admin' : 'tenant_admin'));
+    const role = normalizeRole(magicData.role || (magicData.tenantId === 'system' ? 'super_admin' : 'guard'));
     
     const tenantId = magicData.tenantId;
 
@@ -1528,7 +1571,7 @@ async function startServer() {
       access_token: accessToken,
       tenant: tenantData,
       user: payload,
-      redirect_url: getRedirectUrl(role)
+      redirect_url: getRedirectUrl(role as string)
     });
   });
 
@@ -1777,7 +1820,7 @@ app.get('/api/tenant/monitor/heatmap', requireAuth, async (req, res) => {
 
 // Security Audit Trail (Immutable Logs)
 app.get('/api/tenant/monitor/audit-trail', requireAuth, async (req, res) => {
-  const trail = []; // In production, fetch from specialized audit collection
+  const trail: any[] = []; // In production, fetch from specialized audit collection
   res.json(trail);
 });
 

@@ -1,26 +1,41 @@
 {
   "compilerOptions": {
+    /* Cấu hình cơ bản */
     "target": "ES2022",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "isolatedModules": true,
-    "moduleDetection": "force",
+    "moduleResolution": "node",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    
+    /* Cấu hình Output - Quan trọng để Render chạy được */
+    "outDir": "./dist",
+    "noEmit": false,           // Phải để false để tạo ra file .js
     "allowJs": true,
+    "sourceMap": true,         // Giúp debug lỗi trên Render dễ hơn
+    
+    /* Cấu hình Interop & Kiểm tra lỗi */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    
+    /* Cấu hình cho React/Vite */
     "jsx": "react-jsx",
+    "isolatedModules": true,
+    "useDefineForClassFields": false,
+    "experimentalDecorators": true,
+
+    /* Đường dẫn Alias */
     "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
-    "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "server.ts",      // File backend của bạn
+    "src/**/*",       // Code frontend
+    "vite.config.ts"  // Config của vite
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

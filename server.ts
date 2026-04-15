@@ -116,6 +116,15 @@ interface Incident {
   timestamp?: string | Date;
 }
 
+interface Notification {
+  id: string;
+  tenantId: string;
+  type: string;
+  message: string;
+  createdAt: Date | Timestamp;
+  read?: boolean;
+}
+
 interface MagicToken {
   id: string;
   token: string;
@@ -264,7 +273,7 @@ async function startServer() {
     tenants: {
       getAll: async () => {
         const snapshot = await getDocs(collection(firestore, "tenants"));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Tenant[];
       },
       getById: async (id: string): Promise<Tenant | null> => {
         const docRef = doc(firestore, "tenants", id);
@@ -360,12 +369,12 @@ async function startServer() {
       getByTenant: async (tenantId: string) => {
         const q = query(collection(firestore, "notifications"), where("tenantId", "==", tenantId), orderBy("createdAt", "desc"));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Notification[];
       },
       getById: async (id: string) => {
         const docRef = doc(firestore, "notifications", id);
         const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Notification : null;
       },
     },
     magic_tokens: {

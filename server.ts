@@ -266,7 +266,7 @@ async function startServer() {
     });
   });
 
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   // --- DATABASE LAYER (Firestore Integration) ---
   const firestoreDb = {
@@ -1853,8 +1853,8 @@ app.all("/api/*", (req, res) => {
     });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  httpServer.listen(Number(PORT), "0.0.0.0", () => {
+    console.log(`Server is live on port ${PORT}`);
   });
 }
 

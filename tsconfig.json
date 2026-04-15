@@ -3,35 +3,36 @@
     /* Cấu hình cơ bản */
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
-    // "lib" option removed as per user's complete file.
-    /* Cấu hình Output - Quan trọng để Render chạy được */
+    "moduleResolution": "node", // Giữ là node để tương thích tốt với backend Express
+    
+    /* Cấu hình Output */
     "outDir": "./dist",
-    "noEmit": false,           // Phải để false để tạo ra file .js
+    "noEmit": false,           // Cho phép tạo file nếu bạn chạy tsc độc lập
     "allowJs": true,
-    // "sourceMap" option removed as per user's complete file.
     "resolveJsonModule": true,
+    "isolatedModules": true,   // Bắt buộc khi dùng esbuild/swc
+    
     /* Cấu hình Interop & Kiểm tra lỗi */
     "esModuleInterop": true,
-    // "forceConsistentCasingInFileNames" option removed as per user's complete file.
     "strict": true,
-    "skipLibCheck": true,
-    /* Cấu hình cho React/Vite */
+    "skipLibCheck": true,      // Tránh lỗi từ các thư viện node_modules
+    
+    /* Cấu hình cho React (để esbuild không lỗi khi quét qua src) */
     "jsx": "react-jsx",
-    "isolatedModules": true,
-    /* Đường dẫn Alias */
+    
+    /* Đường dẫn Alias - Khớp với cấu trúc thư mục của bạn */
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
   "include": [
-    "server.ts",      // File backend của bạn
-    "src/types/**/*.ts" // Chỉ include các file type cho backend
+    "server.ts",
+    "src/**/*"                 // Bao gồm toàn bộ src để check type cho chắc chắn
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "src/**/*.tsx", // Exclude frontend React files
-    "src/**/*.ts"   // Exclude frontend TS files (non-tsx)
+    "client"                   // Loại bỏ thư mục client nếu nó nằm riêng biệt
   ]
 }

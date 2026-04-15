@@ -267,6 +267,9 @@ async function startServer() {
   });
 
   const PORT = process.env.PORT || 3000;
+  app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 Server is booming on port ${PORT}`);
+});
 
   // --- DATABASE LAYER (Firestore Integration) ---
   const firestoreDb = {

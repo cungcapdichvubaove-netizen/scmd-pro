@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SCMD Pro v2.0.5</title>
+    <!-- Version: 2.0.5-audit-fix -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+      /* Leaflet Dark Mode Filter */
+      .leaflet-tile-pane {
+        filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+      }
+      .leaflet-container {
+        background: #020617 !important; /* bg-slate-950 */
+        border: none !important;
+      }
+      .leaflet-bar a {
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        color: #38bdf8 !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+        backdrop-filter: blur(8px);
+      }
+      .leaflet-control-attribution {
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.2) !important;
+        font-size: 8px !important;
+      }
+    </style>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#020617" />
+    <link rel="apple-touch-icon" href="https://picsum.photos/seed/scmd192/192/192" />
+    <script>
+      // Protect window.fetch from being overwritten by libraries
+      (function() {
+        const originalFetch = window.fetch;
+        try {
+          Object.defineProperty(window, 'fetch', {
+            configurable: true,
+            enumerable: true,
+            get: function() { return originalFetch; },
+            set: function(v) { 
+              console.warn('Prevented library from overwriting window.fetch');
+            }
+          });
+        } catch (err) {
+          // Silently fail if we can't redefine it
+        }
+        
+        // Polyfill global for libraries that expect it (e.g. some SDKs)
+        // We use a separate object to avoid the "Cannot set property fetch of #<Window>" error
+        if (typeof window.global === 'undefined') {
+          window.global = {
+            fetch: originalFetch.bind(window)
+          };
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

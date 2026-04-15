@@ -1,0 +1,111 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: tenants
+// Fields: name, subdomain, plan, max_employees, is_active, provisioning_status, ssl_enabled, expiry_date, features_enabled, admin_password, token_version, created_at
+//
+// Collection: checkpoints
+// Fields: tenantId, name, latitude, longitude, qr_hash, check_items, status, created_at
+//
+// Collection: staff
+// Fields: tenantId, staffId, name, role, username, password, created_at
+//
+// Collection: patrol_logs
+// Fields: tenantId, staffId, checkpointId, status, notes, location, createdAt
+//
+// Collection: incidents
+// Fields: tenantId, type, severity, location, description, status, createdAt
+//
+// Collection: news
+// Fields: title, slug, content, excerpt, author, category, thumbnail, status, seo_title, seo_description, tags, published_at, updated_at
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "cungcapdichvubaove@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isTenantAdmin(tenantId) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.tenantId == tenantId &&
+        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role == 'tenant_admin';
+    }
+
+    function isStaffOfTenant(tenantId) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.tenantId == tenantId;
+    }
+
+    function isValidTenant(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.subdomain is string && data.subdomain.size() > 0 &&
+             data.plan in ['LITE', 'PRO', 'ENTERPRISE'];
+    }
+
+    function isValidCheckpoint(data) {
+      return data.tenantId is string &&
+             data.name is string && data.name.size() > 0 &&
+             data.qr_hash is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /tenants/{tenantId} {
+      allow read: if isAdmin() || isStaffOfTenant(tenantId);
+      allow create, update: if isAdmin();
+      allow delete: if false; // Soft delete preferred
+    }
+
+    match /checkpoints/{checkpointId} {
+      allow read: if isStaffOfTenant(resource.data.tenantId);
+      allow create, update: if isTenantAdmin(request.resource.data.tenantId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /staff/{staffId} {
+      allow read: if isStaffOfTenant(resource.data.tenantId) || isAdmin();
+      allow create, update: if isTenantAdmin(request.resource.data.tenantId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /patrol_logs/{logId} {
+      allow read: if isStaffOfTenant(resource.data.tenantId) || isAdmin();
+      allow create: if isStaffOfTenant(request.resource.data.tenantId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /incidents/{incidentId} {
+      allow read: if isStaffOfTenant(resource.data.tenantId) || isAdmin();
+      allow create: if isStaffOfTenant(request.resource.data.tenantId);
+      allow update: if isTenantAdmin(resource.data.tenantId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /news/{newsId} {
+      allow read: if resource.data.status == 'published' || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "common": {
+    "success": "Thành công",
+    "sync_success": "Đã đồng bộ",
+    "invalid_request": "Lỗi yêu cầu",
+    "connection_error": "Lỗi mạng: Thử lại",
+    "loading": "Đang tải...",
+    "refresh": "Làm mới",
+    "search": "Tìm kiếm",
+    "actions": "Thao tác",
+    "status": "Trạng thái",
+    "active": "Đang hoạt động",
+    "suspended": "Tạm ngưng",
+    "contact_now": "Liên hệ ngay"
+  },
+  "entities": {
+    "tenant": "Đơn vị khách hàng",
+    "tenants": "Danh sách đơn vị khách hàng",
+    "checkpoint": "Điểm tuần tra",
+    "checkpoints": "Các điểm tuần tra",
+    "patrol": "Lượt tuần tra",
+    "patrols": "Các lượt tuần tra",
+    "checklist": "Danh mục kiểm tra",
+    "incident": "Sự cố an ninh",
+    "incidents": "Các sự cố an ninh",
+    "staff": "Nhân sự",
+    "revenue": "Doanh thu"
+  },
+  "dashboard": {
+    "title": "Business Radar",
+    "subtitle": "Hệ thống giám sát chiến lược & khai thác dữ liệu Đơn vị khách hàng.",
+    "growth_velocity": "Tốc độ tăng trưởng",
+    "active_usage": "Tình trạng sử dụng",
+    "revenue_stream": "Dòng doanh thu",
+    "whale_alerts": "Khách hàng tiềm năng lớn",
+    "smart_notifications": "Thông báo thông minh",
+    "health_score": "Chỉ số sức khỏe",
+    "last_sync": "Đồng bộ cuối lúc",
+    "live_feed": "Dữ liệu trực tiếp",
+    "security_masking": "Bảo mật dữ liệu kích hoạt"
+  },
+  "plans": {
+    "trial": "Dùng thử",
+    "free": "Miễn phí",
+    "pro": "Chuyên nghiệp",
+    "enterprise": "Doanh nghiệp",
+    "at_risk": "Rủi ro rời bỏ"
+  },
+  "landing": {
+    "hero_title": "Giải pháp Quản lý An ninh Thông minh",
+    "hero_subtitle": "Số hóa 100% quy trình tuần tra, giám sát bằng GPS và AI. Triển khai chỉ trong 15 phút.",
+    "start_free": "Bắt đầu miễn phí",
+    "login": "Đăng nhập",
+    "features": "Tính năng",
+    "pricing": "Bảng giá",
+    "guide": "Hướng dẫn",
+    "company_name": "Tên doanh nghiệp",
+    "contact_info": "Email hoặc Số điện thoại",
+    "subdomain": "Tên miền mong muốn",
+    "provisioning": "Đang khởi tạo không gian làm việc...",
+    "provisioning_security": "Cấu hình hệ thống bảo mật riêng biệt...",
+    "provisioning_ready": "Sẵn sàng! Đang đưa bạn đến Dashboard..."
+  },
+  "security": {
+    "guard_view": "Giao diện Nhân viên",
+    "admin_view": "Giao diện Quản trị",
+    "attendance": "Chấm công",
+    "report_incident": "Ghi nhận sự cố",
+    "start_patrol": "Bắt đầu lượt tuần tra",
+    "scan_qr": "Quét mã QR",
+    "location_verified": "Vị trí đã xác thực",
+    "report_success": "Đã báo cáo",
+    "incident_report": "Báo cáo sự cố",
+    "patrol_route": "Lộ trình tuần tra",
+    "complete_patrol": "Hoàn thành tuần tra"
+  }
+}

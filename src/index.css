@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@plugin "daisyui";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  /* Hệ thống mã gen thương hiệu SCMD - UI Tokens */
+  --color-scmd-navy: #0B1120;
+  --color-scmd-slate: #1E293B;
+  --color-scmd-cyber: #3B82F6;
+  --color-scmd-safety: #10B981;
+  --color-scmd-alert: #EF4444;
+
+  /* Typography tiêu chuẩn */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  
+  /* Bo góc & Hiệu ứng */
+  --radius-scmd: 12px;
+  --shadow-scmd-deep: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+@layer components {
+  /* Hiệu ứng kính mờ (Backdrop blur) với viền mỏng 1px màu slate-800 */
+  .scmd-glass {
+    @apply backdrop-blur-xl bg-scmd-slate/50 border border-slate-800 shadow-scmd-deep;
+  }
+
+  /* Hiệu ứng phát sáng nhẹ xung quanh các thành phần quan trọng */
+  .scmd-glow {
+    @apply shadow-[0_0_15px_rgba(59,130,246,0.5)] transition-shadow duration-300;
+  }
+}
+
+@layer base {
+  :root {
+    --scmd-navy: #0B1120;
+    --scmd-slate: #1E293B;
+    --scmd-cyber: #3B82F6;
+    --scmd-safety: #10B981;
+    --scmd-alert: #EF4444;
+  }
+
+  body {
+    @apply bg-scmd-navy text-slate-100 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  /* Định nghĩa các cấp độ Heading với letter-spacing: -0.02em */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-[-0.02em];
+  }
+
+  /* Định nghĩa Body text với leading-relaxed */
+  p, span, div {
+    @apply leading-relaxed;
+  }
+}
+
+/* Native App Feel */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.card-active {
+  @apply active:scale-[0.98] transition-transform duration-100;
+}

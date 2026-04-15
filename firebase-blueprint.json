@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Thông tin đơn vị khách hàng (Multi-tenancy)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "subdomain": { "type": "string" },
+        "plan": { "type": "string", "enum": ["LITE", "PRO", "ENTERPRISE"] },
+        "max_employees": { "type": "number" },
+        "is_active": { "type": "boolean" },
+        "provisioning_status": { "type": "string" },
+        "ssl_enabled": { "type": "boolean" },
+        "expiry_date": { "type": "string", "format": "date-time" },
+        "features_enabled": { "type": "object" },
+        "admin_password": { "type": "string" },
+        "token_version": { "type": "number" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "subdomain", "plan"]
+    },
+    "Checkpoint": {
+      "title": "Checkpoint",
+      "description": "Điểm tuần tra an ninh",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "name": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "qr_hash": { "type": "string" },
+        "check_items": { "type": "array" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "name", "qr_hash"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Nhân sự an ninh",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "staffId": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "staffId", "name", "role", "username"]
+    },
+    "PatrolLog": {
+      "title": "PatrolLog",
+      "description": "Lịch sử tuần tra",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "staffId": { "type": "string" },
+        "checkpointId": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" },
+        "location": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "staffId", "checkpointId", "status"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "Sự cố an ninh",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "type": { "type": "string" },
+        "severity": { "type": "string" },
+        "location": { "type": "object" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "type", "severity", "status"]
+    },
+    "News": {
+      "title": "News",
+      "description": "Tin tức và bài viết SEO",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "content": { "type": "string" },
+        "excerpt": { "type": "string" },
+        "author": { "type": "string" },
+        "category": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "published"] },
+        "seo_title": { "type": "string" },
+        "seo_description": { "type": "string" },
+        "tags": { "type": "array" },
+        "published_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "slug", "content", "status"]
+    }
+  },
+  "firestore": {
+    "/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Bộ sưu tập các đơn vị khách hàng"
+    },
+    "/checkpoints/{checkpointId}": {
+      "schema": "Checkpoint",
+      "description": "Bộ sưu tập các điểm tuần tra"
+    },
+    "/staff/{staffId}": {
+      "schema": "Staff",
+      "description": "Bộ sưu tập nhân sự"
+    },
+    "/patrol_logs/{logId}": {
+      "schema": "PatrolLog",
+      "description": "Bộ sưu tập lịch sử tuần tra"
+    },
+    "/incidents/{incidentId}": {
+      "schema": "Incident",
+      "description": "Bộ sưu tập sự cố"
+    },
+    "/news/{newsId}": {
+      "schema": "News",
+      "description": "Bộ sưu tập tin tức hệ thống"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+# SCMD Pro - AI Coding Rules & Standards (Production Grade)
+
+## 1. Core Architecture: Clean Architecture (Domain-Driven)
+- **Entities**: Pure business logic, data structures, and domain invariants. (Path: `src/apps/*/domain/entities.ts`)
+- **Use Cases**: Application-specific business rules, orchestrating entities.
+- **Interfaces**: Adapters for UI (React), DB (Firestore/IndexedDB), and External APIs.
+- **Infrastructure**: Implementation details, frameworks, and low-level libraries.
+- **Dependency Rule**: Dependencies MUST only point inwards. UI components MUST NOT contain business logic; they should only call Use Cases or Domain Services.
+
+## 2. Multi-tenancy & Data Isolation (Think Zero)
+- **Mandatory `tenant_id`**: Every database record, API request, and state object MUST include or be scoped by `tenant_id`.
+- **Think Zero Leakage**: Zero tolerance for cross-tenant data access. Implement server-side and client-side (IndexedDB) filtering.
+- **Security Context**: `tenant_id` must be derived from a verified session/JWT. Client-side `localStorage` is for UI context only; never trust it for authorization.
+
+## 3. UI/UX: Thumb-first & Navy Aesthetic
+- **Thumb-first Interaction**:
+  - Primary Action Zone: Bottom 33% of the viewport.
+  - Touch Targets: Minimum 48x48px for critical actions.
+  - Navigation: Bottom-tab navigation or easily reachable FABs.
+- **Navy Theme (SCMD Design System)**:
+  - **Colors**: 
+    - Navy Primary: `#020617` (bg-scmd-navy)
+    - Cyber Cyan: Neon accents for interactive states (text-scmd-cyber)
+    - Safety Green: `#10b981` (bg-scmd-safety) for success/valid states.
+    - Alert Red: For suspicious activities or errors.
+  - **Visuals**: Glassmorphism, subtle borders (`border-white/10`), and high-contrast typography.
+  - **Fonts**: Inter (UI/Sans), JetBrains Mono (Technical Data/Logs).
+
+## 4. Technical Excellence & Reliability
+- **TypeScript**: Strict mode enabled. Zero `any` usage. Use Discriminated Unions for complex states.
+- **Offline-first (PWA)**: 
+  - Mandatory use of IndexedDB (via `idb` library) for all operational data.
+  - Background Sync: Implement robust retry logic for syncing pending reports.
+- **Performance**: Memoize expensive calculations. Use `AnimatePresence` for smooth layout transitions.
+- **Observability**: Standardized error logging with context (Operation, Path, Auth State).
+
+## 5. AI Generation Constraints (Strict)
+- **Design Tokens**: Use Tailwind utility classes with SCMD custom theme tokens only.
+- **Logic**: Always verify `tenant_id` presence in new logic.
+- **Accessibility**: Ensure WCAG 2.1 compliance (contrast, ARIA labels).
+- **Production Ready**: Code must include error boundaries and graceful degradation for offline states.

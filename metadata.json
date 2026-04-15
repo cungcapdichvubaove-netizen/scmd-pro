@@ -1,0 +1,8 @@
+{
+  "name": "Remix: SCMD Pro - Enterprise Security Management v4",
+  "description": "Hệ sinh thái B2B SaaS chuyên dụng cho ngành bảo vệ tại Việt Nam - Giải pháp Smart Patrol & AI Anti-Fraud. Tích hợp trang tin tức chuẩn SEO 2026 và quản trị nội dung tập trung.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

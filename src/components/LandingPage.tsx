@@ -169,9 +169,9 @@ export const LandingPage = ({ onLogin, onTrial, onNews }: { onLogin: () => void,
                 </div>
               </motion.div>
 
-              <div className="relative rounded-[2.5rem] overflow-hidden border-[8px] border-slate-800 shadow-2xl shadow-blue-900/40 bg-slate-950 aspect-[9/19]">
+              <div className="relative rounded-[2.5rem] overflow-hidden border-[8px] border-slate-800 shadow-2xl shadow-blue-900/40 bg-slate-950 aspect-[16/9]">
                 <img 
-                  src="https://picsum.photos/seed/securitymap/600/1200" 
+                  src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgsAJ-QhW6RBsDUDxULD7m4cwrtsTFst9uE-9BCSHtakdGHuIOZMXERJb9XKvqFnZOiffI4XxaEo7fe4zvUhF0BbcfybPpjbfYhk_xClnOtSbo1D7rDO-a9gbFGfhabAvUCK0WHBc6-XYYY4r9KSn1t72rbMQpZorq0QURtyLsBi5HMmgoWf1DcQQelcvm-/s2000/bannerchuan-optimized.webp" 
                   alt="SCMD Pro Mobile App" 
                   loading="lazy"
                   referrerPolicy="no-referrer"

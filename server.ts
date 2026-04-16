@@ -68,7 +68,10 @@ async function startServer() {
   });
 
   // --- MIDDLEWARE ---
-  app.use(cors({ origin: true, credentials: true }));
+  app.use(cors({ 
+    origin: ["https://scmd-pro.onrender.com", "http://localhost:5173"], 
+    credentials: true 
+  }));
   app.use(express.json());
 
   // --- DATA ISOLATION (Tenant Middleware) ---

@@ -9,7 +9,7 @@
     "build:frontend": "vite build --outDir dist/client",
     "build:backend": "npx esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
     "start": "node dist/server.js",
-    "clean": "rimraf dist",
+    "clean": "npx rimraf dist",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

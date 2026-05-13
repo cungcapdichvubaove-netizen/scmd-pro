@@ -1,0 +1,78 @@
+{
+  "compilerOptions": {
+    /* --- 1. Runtime (Chuẩn Vite / Browser) --- */
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "google.maps"],
+
+    /* --- 2. Path Alias (KHÔNG dùng baseUrl nữa) --- */
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["./shared/*"],
+      "@server/*": ["./server/*"]
+    },
+
+    /* --- 3. Strict Mode (Enterprise Grade) --- */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "alwaysStrict": true,
+
+    /* --- 4. Code Quality Guard --- */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    /* --- 5. Module & Interop --- */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "useDefineForClassFields": true,
+    "resolveJsonModule": true,
+
+    /* --- 6. Build Output --- */
+    "outDir": "dist",
+    "rootDir": ".",
+    "noEmit": false,
+    "jsx": "react-jsx",
+    "sourceMap": true,
+    "inlineSources": false,
+    "declaration": true,
+    "removeComments": true,
+    "skipLibCheck": true,
+
+    /* --- 7. Experimental (Backend Decorators nếu cần) --- */
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    /* --- 8. Compatibility (Fix TS6 warning) --- */
+    "ignoreDeprecations": "5.0"
+  },
+
+  "include": [
+    "src",
+    "server",
+    "shared",
+    "types",
+    "vite.config.ts"
+  ],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-server",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "coverage"
+  ]
+}

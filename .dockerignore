@@ -1,0 +1,62 @@
+# =============================================================
+# SCMD Pro — .dockerignore (Optimized)
+# Giảm build context để Docker build nhanh hơn
+# =============================================================
+
+# Dependencies (sẽ được npm ci cài trong container)
+.npm
+node_modules
+
+# Build outputs (builder stage sẽ tạo lại)
+dist
+dist-backend
+
+# Git
+.git
+.gitignore
+
+# Environment files (không được đưa vào image)
+.env
+.env.*
+!.env.example
+
+# Docker files (không cần trong image)
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+docker-compose*.yaml
+
+# Dev/test files
+*.test.ts
+*.spec.ts
+coverage
+.nyc_output
+
+# Editor/OS files
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.bak
+
+# Logs
+*.log
+logs
+error.log
+
+# Documentation (không cần trong runtime image)
+docs
+*.md
+!README.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Temporary files
+tmp
+temp
+.tmp
+

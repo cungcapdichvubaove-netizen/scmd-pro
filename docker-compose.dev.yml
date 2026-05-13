@@ -1,0 +1,109 @@
+# =============================================================
+# SCMD Pro — Dev Override v3 (Fix Prisma binaryTargets)
+#
+# THAY DOI SO VOI v2:
+#   - Them buoc "prisma generate" bat buoc sau npm ci
+#     -> Fix loi: Prisma Client generated for debian-openssl-1.1.x
+#        nhung container can debian-openssl-3.0.x
+#   - $$ escaping cho shell variables (tranh Docker Compose interpolate)
+#
+# THOI GIAN KHOI DONG:
+#   Lan 1 (cold):  ~90-120s  (npm ci + generate + migrate)
+#   Lan 2+ (warm): ~20-30s   (skip npm ci, chi generate + migrate)
+# =============================================================
+
+services:
+  app:
+    build: !reset null
+    image: node:22-slim
+
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+
+        # Step 0: Cai curl chi khi chua co
+        if ! command -v curl >/dev/null 2>&1; then
+          echo '[init] Installing curl...'
+          apt-get update -qq && apt-get install -y -qq --no-install-recommends curl > /dev/null 2>&1
+          rm -rf /var/lib/apt/lists/*
+        fi
+
+        # Step 1: npm ci voi hash check
+        # NOTE: Dung $$ thay vi $ de Docker Compose khong interpolate shell variables
+        if [ ! -f /app/node_modules/.package-lock.json ]; then
+          echo '[init] node_modules empty -- running npm ci...'
+          PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+            npm ci --prefer-offline --no-audit --no-fund
+          echo '[init] Dependencies installed.'
+        else
+          LOCK_HASH=$$(md5sum /app/package-lock.json 2>/dev/null | cut -d' ' -f1)
+          CACHED_HASH=$$(cat /app/node_modules/.lock-hash 2>/dev/null || echo "none")
+          if [ "$$LOCK_HASH" != "$$CACHED_HASH" ]; then
+            echo '[init] package-lock.json changed -- re-running npm ci...'
+            PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+              npm ci --prefer-offline --no-audit --no-fund
+            echo "$$LOCK_HASH" > /app/node_modules/.lock-hash
+            echo '[init] Dependencies updated.'
+          else
+            echo '[init] node_modules up-to-date (cache hit). Skipping npm ci.'
+          fi
+        fi
+
+        # Ghi hash lan dau neu chua co
+        if [ ! -f /app/node_modules/.lock-hash ]; then
+          md5sum /app/package-lock.json 2>/dev/null | cut -d' ' -f1 > /app/node_modules/.lock-hash || true
+        fi
+
+        # Step 1b: Prisma generate - BAT BUOC chay trong container
+        # Ly do: Prisma Client tren host duoc generate cho openssl-1.1.x (Windows/Mac)
+        #        Container node:22-slim (Debian Bookworm) can openssl-3.0.x
+        #        -> Phai generate lai trong container moi dung binary target
+        echo '[init] Running prisma generate...'
+        npx prisma generate
+        echo '[init] Prisma client ready.'
+
+        # Step 2: Prisma migrate
+        echo '[init] Running prisma migrate...'
+        npx prisma migrate deploy 2>/dev/null || npx prisma db push --skip-generate
+        echo '[init] Database ready.'
+
+        # Step 3: Start tsx watch
+        echo '[dev] Starting tsx watch (auto-reload on .ts changes)...'
+        exec npx tsx watch --clear-screen=false src/server/index.ts
+
+    volumes:
+      - .:/app
+      - scmd_node_modules:/app/node_modules
+
+    working_dir: /app
+
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-scmd_admin}:${POSTGRES_PASSWORD:-scmd2026}@db:5432/${POSTGRES_DB:-scmd_pro}?schema=public
+      REDIS_URL: rediss://:${REDIS_PASSWORD:-CHANGE_ME_redis_password_2026}@redis:6379
+      SERVICE_TYPE: ALL
+      OTEL_SDK_DISABLED: "true"
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      # npm ci ~60-90s + generate ~10s + migrate ~5s + start ~5s = ~120s
+      # Buffer them 30s cho may cham/Windows -> 150s
+      start_period: 150s
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+    restart: "no"
+
+volumes:
+  scmd_node_modules:

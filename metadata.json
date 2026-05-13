@@ -1,0 +1,10 @@
+{
+  "name": "SCMDPro - V.5.0.1.5",
+  "description": "SCMD Pro là nền tảng giúp doanh nghiệp giám sát, đánh giá và kiểm soát chất lượng dịch vụ bảo vệ thuê ngoài theo thời gian thực, dựa trên dữ liệu và bằng chứng số.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

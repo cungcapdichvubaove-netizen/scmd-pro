@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http: https: ws: wss:; img-src 'self' http: https: data: blob: *.openstreetmap.org ui-avatars.com images.unsplash.com picsum.photos;">
+    <title>SCMD Pro v5.0.0</title>
+    <!-- Version: 5.0.0-Enterprise -->
+    <script>
+      // SCMD PRO FIX: Anti-Sandbox Fetch Collision
+      // Ngăn lỗi "Cannot set property fetch of #<Window> which has only a getter"
+      // xảy ra khi các thư viện (như OpenTelemetry) cố gắng patch window.fetch trong môi trường sandbox.
+      (function() {
+        try {
+          const originalFetch = window.fetch;
+          let currentFetch = originalFetch;
+          Object.defineProperty(window, 'fetch', {
+            configurable: true,
+            enumerable: true,
+            get: function() { return currentFetch; },
+            set: function(newFetch) { currentFetch = newFetch; }
+          });
+        } catch (e) {
+          // Fail-silent setup for sandbox
+        }
+      })();
+
+      // SCMD PRO FIX: Tắt hoàn toàn rác console từ Vite HMR WebSocket
+      const OriginalWebSocket = window.WebSocket;
+      window.WebSocket = function(url, protocols) {
+        if (typeof url === 'string' && (url.includes(':24678') || url.includes('__vite_hmr'))) {
+          // Trả về một dummy object trông giống WebSocket nhưng không làm gì cả
+          const dummyWS = {
+            addEventListener: function() {},
+            removeEventListener: function() {},
+            send: function() {},
+            close: function() { this.readyState = 3; },
+            readyState: 0,
+            OPEN: 1,
+            CONNECTING: 0,
+            CLOSING: 2,
+            CLOSED: 3
+          };
+          setTimeout(() => {
+            dummyWS.readyState = 3; // CLOSED
+            if (typeof dummyWS.onclose === 'function') {
+              dummyWS.onclose({ code: 1000, reason: 'HMR disabled', wasClean: true });
+            }
+          }, 100);
+          return dummyWS;
+        }
+        return new OriginalWebSocket(url, protocols);
+      };
+      // Gán lại các property prototype
+      window.WebSocket.prototype = OriginalWebSocket.prototype;
+      window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+      window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+      window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+      window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+    </script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+      .leaflet-tile-pane {
+        filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+      }
+      .leaflet-container {
+        background: #020617 !important;
+        border: none !important;
+      }
+      .leaflet-bar a {
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        color: #38bdf8 !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+        backdrop-filter: blur(8px);
+      }
+      .leaflet-control-attribution {
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.2) !important;
+        font-size: 8px !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

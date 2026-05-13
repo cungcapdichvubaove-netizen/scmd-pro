@@ -1,0 +1,66 @@
+# Dockerfile được thiết kế siêu gọn cho phiên bản cá nhân/desktop
+# [FIX M-03] Convert CRLF → LF (file gốc có CRLF gây lỗi trên Linux/macOS)
+# [FIX H-06] Bỏ COPY node_modules từ host — tránh platform mismatch và cache poisoning
+
+# 1. Base Image - Build Frontend & Backend
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# [FIX H-06] Install trong container đúng platform, KHÔNG copy node_modules từ host
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --fetch-timeout=120000
+# FIX: --ignore-scripts bỏ qua postinstall của esbuild (chmod binary)
+# Chạy thủ công để đảm bảo binary có quyền execute
+RUN node node_modules/esbuild/install.js
+
+COPY . .
+# Tạo Prisma Client và Build App
+RUN npx prisma generate
+RUN npm run build
+
+# 2. Production Runtime Image
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+# Cài đặt Chromium native cho Puppeteer xuất PDF không bị phình to
+RUN apk add --no-cache \
+      chromium \
+      nss \
+      freetype \
+      freetype-dev \
+      harfbuzz \
+      ca-certificates \
+      ttf-freefont
+
+# Thiết lập biến môi trường quan trọng
+ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Copy dependencies từ builder (đã bao gồm Prisma Client)
+COPY package.json package-lock.json ./
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy Prisma schema và Migration files để chạy ở init
+COPY prisma ./prisma
+COPY run-migration.mjs ./
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
+# Copy source từ builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig*.json ./
+
+# Setup directories for uploads and set permissions
+RUN mkdir -p /app/public/assets && chown -R node:node /app/public/assets
+
+# Không chạy dưới quyền Root để tăng cường an ninh
+USER node
+
+EXPOSE 3000
+CMD ["./entrypoint.sh"]
+

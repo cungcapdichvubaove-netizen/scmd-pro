@@ -1,0 +1,67 @@
+services:
+  db:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: scmd-desktop-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - scmd_local_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: scmd-desktop-redis
+    restart: unless-stopped
+    # [FIX] Đổi allkeys-lru -> noeviction để BullMQ không mất job khi Redis đầy bộ nhớ
+    command: redis-server --maxmemory 256mb --maxmemory-policy noeviction
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.desktop
+    container_name: scmd-desktop-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Được set tự động bởi reset-desktop.sh / Reset-Desktop.bat
+      - AUTO_SEED=${AUTO_SEED:-false}
+      # DATABASE_URL dùng hostname nội bộ "db" — phải override ở đây, không đặt trong .env được
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
+      - DIRECT_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - scmd_local_assets:/app/public/assets
+
+volumes:
+  scmd_local_pgdata:
+  scmd_local_assets:

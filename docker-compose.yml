@@ -1,0 +1,563 @@
+# =============================================================
+# SCMD Pro — Docker Compose Production (v4-final)
+#
+# FIX (2026-04-30):
+#   [F4] Đồng bộ PORT=3000 (Chuẩn AI Studio & Nginx)
+#   [F5] Healthcheck pdf-service: localhost:3001
+#   [F6] expose: 3001 và 3000 cho đúng vai trò
+#
+# QUAN TRỌNG — Auto-merge override:
+#   docker-compose.override.yml được Docker Compose TỰ ĐỘNG merge
+#   kể cả khi chỉ chạy: docker compose -f docker-compose.yml up
+#   → File đó đã được đổi tên thành docker-compose.dev.yml
+#   → Production dùng: docker compose -f docker-compose.yml up -d
+#   → Dev dùng:        docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =============================================================
+
+services:
+  db:
+    image: postgis/postgis:15-3.4-alpine
+    container_name: scmd_db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scmd_admin}
+      # [FIX C-04] Đồng bộ default password với tất cả services (migrate, api, worker, pgbouncer)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scmd_secret_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-scmd_pro}
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scmd_admin} -d ${POSTGRES_DB:-scmd_pro}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    container_name: scmd_redis
+    command: >
+      redis-server
+      --tls-port 6379
+      --port 0
+      --tls-cert-file /etc/ssl/redis/redis.crt
+      --tls-key-file /etc/ssl/redis/redis.key
+      --tls-ca-cert-file /etc/ssl/redis/ca.crt
+      --tls-auth-clients no
+      --requirepass ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      --masterauth ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      --maxmemory 450mb
+      --maxmemory-policy allkeys-lru
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./infra/certs:/etc/ssl/redis:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/etc/ssl/redis/ca.crt", "-a", "${REDIS_PASSWORD:-redis_secure_pass_2026}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: scmd_redis_replica
+    command: >
+      redis-server
+      --tls-port 6379
+      --port 0
+      --tls-cert-file /etc/ssl/redis/redis.crt
+      --tls-key-file /etc/ssl/redis/redis.key
+      --tls-ca-cert-file /etc/ssl/redis/ca.crt
+      --tls-auth-clients no
+      --tls-replication yes
+      --replicaof redis 6379
+      # [FIX H-02] --slaveof deprecated từ Redis 5.0, dùng --replicaof trong Redis 7+
+      --requirepass ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      --masterauth ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      --maxmemory 450mb
+      --maxmemory-policy allkeys-lru
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./infra/certs:/etc/ssl/redis:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/etc/ssl/redis/ca.crt", "-a", "${REDIS_PASSWORD:-redis_secure_pass_2026}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  redis-sentinel-1:
+    image: bitnami/redis-sentinel:7
+    container_name: scmd_redis_sentinel_1
+    # ports:
+    #   - "26379:26379"
+    environment:
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_MASTER_HOST=redis
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_MASTER_SET=mymaster
+      - REDIS_SENTINEL_PASSWORD=${REDIS_PASSWORD:-redis_secure_pass_2026}
+      - REDIS_MASTER_PASSWORD=${REDIS_PASSWORD:-redis_secure_pass_2026}
+      - REDIS_SENTINEL_TLS_ENABLED=yes
+      - REDIS_SENTINEL_TLS_PORT_NUMBER=26379
+      - REDIS_SENTINEL_PORT_NUMBER=0
+      - REDIS_SENTINEL_TLS_CERT_FILE=/etc/ssl/redis/redis.crt
+      - REDIS_SENTINEL_TLS_KEY_FILE=/etc/ssl/redis/redis.key
+      - REDIS_SENTINEL_TLS_CA_FILE=/etc/ssl/redis/ca.crt
+      - REDIS_SENTINEL_TLS_AUTH_CLIENTS=no
+    volumes:
+      - ./infra/certs:/etc/ssl/redis:ro
+    depends_on:
+      - redis
+      - redis-replica
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "--tls", "--cacert", "/etc/ssl/redis/ca.crt", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+
+  redis-sentinel-2:
+    image: bitnami/redis-sentinel:7
+    container_name: scmd_redis_sentinel_2
+    environment:
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_MASTER_HOST=redis
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_MASTER_SET=mymaster
+      - REDIS_SENTINEL_PASSWORD=${REDIS_PASSWORD:-redis_secure_pass_2026}
+      - REDIS_MASTER_PASSWORD=${REDIS_PASSWORD:-redis_secure_pass_2026}
+      - REDIS_SENTINEL_TLS_ENABLED=yes
+      - REDIS_SENTINEL_TLS_PORT_NUMBER=26379
+      - REDIS_SENTINEL_PORT_NUMBER=0
+      - REDIS_SENTINEL_TLS_CERT_FILE=/etc/ssl/redis/redis.crt
+      - REDIS_SENTINEL_TLS_KEY_FILE=/etc/ssl/redis/redis.key
+      - REDIS_SENTINEL_TLS_CA_FILE=/etc/ssl/redis/ca.crt
+      - REDIS_SENTINEL_TLS_AUTH_CLIENTS=no
+    volumes:
+      - ./infra/certs:/etc/ssl/redis:ro
+    depends_on:
+      - redis
+      - redis-replica
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "--tls", "--cacert", "/etc/ssl/redis/ca.crt", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+
+  redis-sentinel-3:
+    image: bitnami/redis-sentinel:7
+    container_name: scmd_redis_sentinel_3
+    environment:
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_MASTER_HOST=redis
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_MASTER_SET=mymaster
+      - REDIS_SENTINEL_PASSWORD=${REDIS_PASSWORD:-redis_secure_pass_2026}
+      - REDIS_MASTER_PASSWORD=${REDIS_PASSWORD:-redis_secure_pass_2026}
+      - REDIS_SENTINEL_TLS_ENABLED=yes
+      - REDIS_SENTINEL_TLS_PORT_NUMBER=26379
+      - REDIS_SENTINEL_PORT_NUMBER=0
+      - REDIS_SENTINEL_TLS_CERT_FILE=/etc/ssl/redis/redis.crt
+      - REDIS_SENTINEL_TLS_KEY_FILE=/etc/ssl/redis/redis.key
+      - REDIS_SENTINEL_TLS_CA_FILE=/etc/ssl/redis/ca.crt
+      - REDIS_SENTINEL_TLS_AUTH_CLIENTS=no
+    volumes:
+      - ./infra/certs:/etc/ssl/redis:ro
+    depends_on:
+      - redis
+      - redis-replica
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "--tls", "--cacert", "/etc/ssl/redis/ca.crt", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-scmd_admin}:${POSTGRES_PASSWORD:-scmd_secret_pass}@db:5432/${POSTGRES_DB:-scmd_pro}?schema=public
+      # [FIX M-04] DIRECT_URL để Prisma migrate bypass pgbouncer (transaction mode không tương thích)
+      - DIRECT_URL=postgresql://${POSTGRES_USER:-scmd_admin}:${POSTGRES_PASSWORD:-scmd_secret_pass}@db:5432/${POSTGRES_DB:-scmd_pro}?schema=public
+    entrypoint: []
+    command: >
+      sh -c "npx prisma migrate deploy && node run-migration.mjs"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    restart: on-failure
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: scmd_pgbouncer
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-scmd_admin}:${POSTGRES_PASSWORD:-scmd_secret_pass}@db:5432/${POSTGRES_DB:-scmd_pro}
+      - MAX_CLIENT_CONN=500
+      - DEFAULT_POOL_SIZE=20
+      - POOL_MODE=transaction
+      - ADMIN_USERS=${POSTGRES_USER:-scmd_admin}
+      # [FIX C-02] Đổi sang md5 và dùng AUTH_USER/AUTH_PASSWORD thay vì AUTH_FILE
+      # AUTH_FILE gây lỗi "file not found" vì không có volume mount userlist.txt
+      - AUTH_TYPE=md5
+      - AUTH_USER=${POSTGRES_USER:-scmd_admin}
+      - AUTH_PASSWORD=${POSTGRES_PASSWORD:-scmd_secret_pass}
+    volumes:
+      - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: scmd_prometheus
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: scmd_grafana
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-ADMIN_PASSWORD_123}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    ports:
+      - "127.0.0.1:3003:3000"
+    depends_on:
+      - prometheus
+      - loki
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  loki:
+    image: grafana/loki:latest
+    container_name: scmd_loki
+    volumes:
+      - ./infra/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-scmd_admin}:${POSTGRES_PASSWORD:-scmd_secret_pass}@pgbouncer:6432/${POSTGRES_DB:-scmd_pro}?pgbouncer=true&schema=public
+      REDIS_URL: rediss://:${REDIS_PASSWORD:-redis_secure_pass_2026}@redis:6379
+      REDIS_SENTINEL_NODES: redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      REDIS_SENTINEL_NAME: mymaster
+      REDIS_SENTINEL_PASSWORD: ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      SERVICE_TYPE: REALTIME
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+      OTEL_SERVICE_NAME: scmd-api
+      PDF_SERVICE_URL: http://pdf-service:3001
+    stop_grace_period: 30s
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-sentinel-1:
+        condition: service_healthy
+      redis-sentinel-2:
+        condition: service_healthy
+      redis-sentinel-3:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      pdf-service:
+        condition: service_started
+      jaeger:
+        condition: service_started
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  worker-light:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-scmd_admin}:${POSTGRES_PASSWORD:-scmd_secret_pass}@pgbouncer:6432/${POSTGRES_DB:-scmd_pro}?pgbouncer=true&schema=public
+      REDIS_URL: rediss://:${REDIS_PASSWORD:-redis_secure_pass_2026}@redis:6379
+      REDIS_SENTINEL_NODES: redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      REDIS_SENTINEL_NAME: mymaster
+      REDIS_SENTINEL_PASSWORD: ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      SERVICE_TYPE: WORKER_LIGHT
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+      OTEL_SERVICE_NAME: scmd-worker-light
+    stop_grace_period: 30s
+    # [FIX H-01] Expose port 3000 nội bộ cho healthcheck
+    expose:
+      - "3000"
+    healthcheck:
+      # [FIX H-01] Dùng node native thay wget (không có trong node:22-alpine base image)
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health/worker',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-sentinel-1:
+        condition: service_healthy
+      redis-sentinel-2:
+        condition: service_healthy
+      redis-sentinel-3:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      jaeger:
+        condition: service_started
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  worker-heavy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-scmd_admin}:${POSTGRES_PASSWORD:-scmd_secret_pass}@pgbouncer:6432/${POSTGRES_DB:-scmd_pro}?pgbouncer=true&schema=public
+      REDIS_URL: rediss://:${REDIS_PASSWORD:-redis_secure_pass_2026}@redis:6379
+      REDIS_SENTINEL_NODES: redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      REDIS_SENTINEL_NAME: mymaster
+      REDIS_SENTINEL_PASSWORD: ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      SERVICE_TYPE: WORKER_HEAVY
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+      OTEL_SERVICE_NAME: scmd-worker-heavy
+    stop_grace_period: 30s
+    # [FIX H-01] Expose port 3000 nội bộ cho healthcheck
+    expose:
+      - "3000"
+    healthcheck:
+      # [FIX H-01] Dùng node native thay wget (không có trong node:22-alpine base image)
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health/worker',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-sentinel-1:
+        condition: service_healthy
+      redis-sentinel-2:
+        condition: service_healthy
+      redis-sentinel-3:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      jaeger:
+        condition: service_started
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1.5G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: scmd_jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    # [FIX C-06] Expose OTLP ports nội bộ để api/worker gửi traces
+    expose:
+      - "4318"  # OTLP HTTP — cho api/worker trong cùng Docker network
+      - "4317"  # OTLP gRPC
+    ports:
+      - "127.0.0.1:16686:16686" # UI — chỉ localhost, không public
+    restart: always
+
+  pdf-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.pdf
+    env_file:
+      - .env
+    environment:
+      - PORT=3001
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
+    expose:
+      - "3001"
+    restart: always
+    healthcheck:
+      # [F5] PORT=3001 — Khớp nội bộ pdf-service
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: scmd_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/certs/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  loki_data:
+    driver: local

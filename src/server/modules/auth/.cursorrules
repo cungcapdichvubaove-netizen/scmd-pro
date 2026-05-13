@@ -1,0 +1,30 @@
+# SCMD Pro - AI Coding Rules
+
+## 1. Architecture & Patterns
+- Follow **Clean Architecture**: Domain -> UseCases -> Controllers -> Infra.
+- Always use **Native ESM** (.js extensions in imports).
+- Database: Use Prisma with **Row Level Security (RLS)**.
+- Every scoped table MUST include `tenant_id`. AI must never generate queries that bypass the `withTenant` or `forTenant` wrappers.
+
+## 2. Security Standards
+- **Authentication**: Access Tokens (JWT, 15m), Refresh Tokens (Opaque UUID in Redis, 7d with rotation).
+- **Validation**: All inputs MUST be validated via Zod schemas (shared/contracts.ts).
+- **Brute-force**: Keys in Redis must follow format `login_attempts_user:{tenantCode}:{username}`.
+- **Environment**: Use `getSecret()` helper to enforce fail-fast in production.
+
+## 3. UI/UX (Thumb-first & Navy Theme)
+- **Colors**: Primary: `#0D1324` (Deep Navy), Accent: `#2563EB` (Primary Blue).
+- **Layout**: Critical actions (Scan QR, SOS) must be within thumb reach (bottom 30% of screen).
+- **Typography**: Use Inter, strictly NO italics.
+- **Vite 7**: When adding new UI libs, update `manualChunks` in `vite.config.ts` to include them in `vendor-ui`.
+
+## 4. Backend Specifics
+- **PostgreSQL**: Use PostGIS for location data. SRID: 4326.
+- **Workers**: Use BullMQ. Distinguish between 'heavy' and 'light' queues.
+- **Logging**: Always use the structured logger. Include `trace_id` from OpenTelemetry context.
+
+## 5. Prohibited Actions
+- Do NOT use `any` unless absolutely necessary for low-level infra.
+- Do NOT hardcode secrets.
+- Do NOT use `req.body` directly without Zod parsing.
+- Do NOT generate code using italics in CSS/Tailwind.

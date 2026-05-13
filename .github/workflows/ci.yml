@@ -1,0 +1,72 @@
+name: SCMD Pro - Continuous Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-gate:
+    name: Code Quality & Security Gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: scmd_db
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/scmd_db?schema=public
+      DIRECT_URL: postgresql://user:password@localhost:5432/scmd_db?schema=public
+      JWT_SECRET: ci-test-secret-at-least-32-characters-long
+      INTERNAL_API_SECRET: ci-internal-secret-for-tests-only
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Prisma Audit & Generation
+        run: |
+          npx prisma generate
+          # Verify migration lock is healthy
+          if [ ! -f prisma/migrations/migration_lock.toml ]; then
+            echo "❌ ERROR: migration_lock.toml is missing!"
+            exit 1
+          fi
+
+      - name: Migration Safety Guard (Schema Drift Check)
+        run: |
+          # Detects if schema.prisma is out of sync with migrations
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code
+
+      - name: Static Analysis (Lint & Types)
+        run: npm run lint
+
+      - name: Automated Security & Unit Tests
+        run: npm run test
+
+      - name: Build Integrity Check (Frontend + Backend)
+        run: npm run build

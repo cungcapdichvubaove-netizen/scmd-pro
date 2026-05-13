@@ -1,0 +1,141 @@
+import { useState, useCallback, useMemo } from 'react';
+import { apiFetch } from '../../../../lib/api';
+import type { Checkpoint, PatrolRoute, PatrolLog, Stats, Notification } from '../types';
+
+export function usePatrolData(setMessage: (msg: any) => void) {
+  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [checkpointsNextCursor, setCheckpointsNextCursor] = useState<string | null>(null);
+  const [hasMoreCheckpoints, setHasMoreCheckpoints] = useState<boolean>(false);
+  const [loadingMoreCheckpoints, setLoadingMoreCheckpoints] = useState(false);
+  const [routes, setRoutes] = useState<PatrolRoute[]>([]);
+  const [patrolLogs, setPatrolLogs] = useState<PatrolLog[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    completionRate: 0,
+    totalCheckpoints: 0,
+    completedCheckpoints: 0,
+    dailyStats: [],
+  });
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [tenantInfo, setTenantInfo] = useState<any>(null);
+  const [monthlyInsights, setMonthlyInsights] = useState<any | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [isLoadingMonthlyAI, setIsLoadingMonthlyAI] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
+  const fetchPatrolData = useCallback(async () => {
+    setLoading(true);
+    setIsLoadingMonthlyAI(true);
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('TIMEOUT')), 15000)
+    );
+
+    try {
+      const fetchInitialCheckpoints = async (): Promise<{ data: Checkpoint[], nextCursor: string | null, hasMore: boolean }> => {
+        const url = `/api/tenant/checkpoints?limit=50`;
+        const result = await apiFetch<any>(url);
+        return {
+          data: Array.isArray(result) ? result : (result?.data || []),
+          nextCursor: result?.nextCursor || null,
+          hasMore: result?.hasMore || false,
+        };
+      };
+
+      await Promise.race([
+        (async () => {
+          const [cpData, statsData, notifData, , meData, logsData, routesData, , monthlyAiData] =
+            await Promise.all([
+              fetchInitialCheckpoints().catch(() => ({ data: [], nextCursor: null, hasMore: false })),
+              apiFetch<Stats>('/api/tenant/stats').catch(() => ({
+                completionRate: 0,
+                totalCheckpoints: 0,
+                completedCheckpoints: 0,
+                dailyStats: [],
+              })),
+              apiFetch<Notification[]>('/api/tenant/notifications').catch(() => []),
+              apiFetch<any>('/api/subscriptions/pricing').catch(() => null),
+              apiFetch<any>('/api/me').catch(() => ({})),
+              apiFetch<any>('/api/tenant/patrol-logs?limit=50').catch(() => ({ data: [] })),
+              apiFetch<PatrolRoute[]>('/api/tenant/routes').catch(() => []),
+              apiFetch<any[]>('/api/tenant/attendance').catch(() => []),
+              apiFetch<any>(
+                `/api/reports/smart-monthly?month=${new Date().toISOString().substring(0, 7)}`,
+              ).catch(() => null),
+            ]);
+
+          const cpState = cpData as { data: Checkpoint[], nextCursor: string | null, hasMore: boolean };
+          setCheckpoints(cpState.data);
+          setCheckpointsNextCursor(cpState.nextCursor);
+          setHasMoreCheckpoints(cpState.hasMore);
+          setStats(statsData);
+          setNotifications(notifData);
+          setTenantInfo(meData?.tenant);
+          setPatrolLogs(Array.isArray(logsData) ? logsData : (logsData as any)?.data || []);
+          setRoutes(Array.isArray(routesData) ? routesData : []);
+          setMonthlyInsights(monthlyAiData);
+
+          if (meData?.tenant?.is_new) setShowWelcomeModal(true);
+        })(),
+        timeoutPromise
+      ]);
+    } catch (err: any) {
+      console.error('Error fetching patrol data:', err);
+      if (err.message === 'TIMEOUT') {
+        setMessage({ text: 'Kết nối mạng yếu, hệ thống đang hiển thị dữ liệu đệm (Offline Mode)', type: 'error' });
+      }
+      if (err.message?.includes('401')) {
+        localStorage.removeItem('scmd_user_role');
+        localStorage.removeItem('scmd_jwt');
+        window.location.href = '/';
+      }
+    } finally {
+      setLoading(false);
+      setIsLoadingMonthlyAI(false);
+    }
+  }, [setMessage]);
+
+  const loadMoreCheckpoints = useCallback(async () => {
+    if (!hasMoreCheckpoints || !checkpointsNextCursor || loadingMoreCheckpoints) return;
+    
+    setLoadingMoreCheckpoints(true);
+    try {
+      const url = `/api/tenant/checkpoints?limit=50&cursor=${checkpointsNextCursor}`;
+      const result = await apiFetch<any>(url);
+      const newData = Array.isArray(result) ? result : (result?.data || []);
+      
+      setCheckpoints(prev => {
+        // filter out potential duplicates
+        const existingIds = new Set(prev.map(c => c.id));
+        const filteredNewData = newData.filter((c: any) => !existingIds.has(c.id));
+        return [...prev, ...filteredNewData];
+      });
+      setCheckpointsNextCursor(result?.nextCursor || null);
+      setHasMoreCheckpoints(result?.hasMore || false);
+    } catch (err) {
+      console.error('Failed to load more checkpoints:', err);
+      setMessage({ text: 'Lỗi tải thêm điểm tuần tra', type: 'error' });
+    } finally {
+      setLoadingMoreCheckpoints(false);
+    }
+  }, [hasMoreCheckpoints, checkpointsNextCursor, loadingMoreCheckpoints, setMessage]);
+
+  return useMemo(() => ({
+    checkpoints, setCheckpoints,
+    checkpointsNextCursor, hasMoreCheckpoints,
+    loadMoreCheckpoints, loadingMoreCheckpoints,
+    routes, setRoutes,
+    patrolLogs, setPatrolLogs,
+    stats, setStats,
+    notifications, setNotifications,
+    tenantInfo, setTenantInfo,
+    monthlyInsights, setMonthlyInsights,
+    loading, setLoading,
+    isLoadingMonthlyAI, setIsLoadingMonthlyAI,
+    showWelcomeModal, setShowWelcomeModal,
+    fetchPatrolData
+  }), [
+    checkpoints, checkpointsNextCursor, hasMoreCheckpoints, loadMoreCheckpoints, loadingMoreCheckpoints, routes, patrolLogs, stats, notifications, tenantInfo,
+    monthlyInsights, loading, isLoadingMonthlyAI, showWelcomeModal, fetchPatrolData
+  ]);
+}

@@ -1,0 +1,719 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  // FIX: "driverAdapters" đã stable trong Prisma 6.x, không cần previewFeatures
+  // FIX: "tracing" cần @prisma/instrumentation, giữ lại nhưng bỏ driverAdapters khỏi preview
+  previewFeatures = ["tracing"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // [FIX M-04] directUrl bypass pgbouncer cho Prisma migrations
+  // Prisma migrate không tương thích với pgbouncer transaction mode
+  directUrl = env("DIRECT_URL")
+}
+
+model Task {
+  id          String    @id @default(uuid()) @map("id")
+  tenantId    String    @map("tenant_id")
+  title       String    @map("title")
+  description String?   @map("description")
+  status      String    @default("PENDING") @map("status") // PENDING, IN_PROGRESS, COMPLETED
+  priority    String    @default("MEDIUM") @map("priority") // LOW, MEDIUM, HIGH
+  dueDate     DateTime? @map("due_date")
+  assigneeId  String?   @map("assignee_id")
+  createdBy   String?   @map("created_by")
+  metadata    Json?     @map("metadata")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@index([assigneeId, status])
+  @@index([createdAt])
+  @@map("tasks")
+}
+
+model Checkpoint {
+  id        String   @id @default(uuid()) @map("id")
+  tenantId  String   @map("tenant_id")
+  name      String   @map("name")
+  status    String   @default("active") @map("status")
+  qrHash    String   @default("") @map("qr_hash")
+  checkItems Json?    @map("check_items")
+  // PostGIS geography column - defined as Unsupported in Prisma DSL for manual raw queries
+  location  Unsupported("geography(Point, 4326)")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // ── Learning Mode / Benchmark fields ──
+  benchmarkTravelTime   Int?      @map("benchmark_travel_time")
+  benchmarkWorkDuration Int?      @map("benchmark_work_duration")
+  benchmarkTolerancePct Int?      @default(20) @map("benchmark_tolerance_pct")
+  benchmarkRecordedBy   String?   @map("benchmark_recorded_by")
+  benchmarkRecordedAt   DateTime? @map("benchmark_recorded_at")
+  benchmarkSessionCount Int?      @default(0) @map("benchmark_session_count")
+
+  logs      PatrolLog[]
+  deviations PatrolBenchmarkDeviation[]
+  benchmarkSessions CheckpointBenchmarkSession[]
+
+  @@index([tenantId, status])
+  @@index([createdAt])
+  @@map("checkpoints")
+}
+
+model CheckpointBenchmarkSession {
+  id             String     @id @default(uuid()) @map("id")
+  tenantId       String     @map("tenant_id")
+  checkpointId   String     @map("checkpoint_id")
+  travelTime     Int        @map("travel_time")
+  workDuration   Int        @map("work_duration")
+  lat            Float?     @map("lat")
+  lon            Float?     @map("lon")
+  recordedBy     String     @map("recorded_by")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  checkpoint     Checkpoint @relation(fields: [checkpointId], references: [id])
+
+  @@index([checkpointId])
+  @@index([tenantId])
+  @@map("checkpoint_benchmark_sessions")
+}
+
+model PatrolBenchmarkDeviation {
+  id            String   @id @default(uuid()) @map("id")
+  tenantId      String   @map("tenant_id")
+  patrolLogId   String   @map("patrol_log_id")
+  checkpointId  String   @map("checkpoint_id")
+  staffId       String   @map("staff_id")
+
+  actualTravelTime    Int?    @map("actual_travel_time")
+  actualWorkDuration  Int?    @map("actual_work_duration")
+  expectedTravelTime  Int?    @map("expected_travel_time")
+  expectedWorkDuration Int?   @map("expected_work_duration")
+  tolerancePct        Int?    @map("tolerance_pct")
+
+  travelDeviationPct  Decimal? @map("travel_deviation_pct")
+  workDeviationPct    Decimal? @map("work_deviation_pct")
+  isCompliant         Boolean? @map("is_compliant")
+  violationType       String?  @map("violation_type")
+  severity            String   @default("low") @map("severity")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  checkpoint Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  staff      Staff      @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, staffId])
+  @@map("patrol_benchmark_deviations")
+}
+
+model Staff {
+  id        String   @id @default(uuid()) @map("id")
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  username  String   @unique @map("username")
+  email     String   @unique @map("email")
+  password  String   @default("") @map("password")
+  fullName  String   @map("full_name")
+  phone     String?  @map("phone")
+  role      String   @default("guard") @map("role")
+  status    String   @default("active") @map("status")
+  tokenVersion Int     @default(1) @map("token_version")
+  qualifications String[] @default([]) @map("qualifications")
+  
+  // ── Smart Recognition & Credentials ──
+  idNumber      String?  @unique @map("id_number")
+  licenseNumber String?  @map("license_number")
+  idExpiry      DateTime? @map("id_expiry")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  logs      PatrolLog[]
+  attendanceRecords AttendanceRecord[]
+  performanceMetrics StaffPerformanceMetric[]
+  disciplinaryActions DisciplinaryAction[]
+  reportedIncidents Incident[] @relation("IncidentReporter")
+  assignedIncidents Incident[] @relation("IncidentAssignee")
+  benchmarkDeviations PatrolBenchmarkDeviation[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, id])
+  @@index([role])
+  @@index([idNumber])
+  @@map("staff")
+}
+
+model StaffPerformanceMetric {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  staffId         String   @map("staff_id")
+  period          String   @map("period") // YYYY-MM
+  trustScore      Float    @map("trust_score")
+  attendanceRate  Float    @map("attendance_rate")
+  missedPoints    Int      @map("missed_points")
+  sosCount        Int      @map("sos_count")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  staff           Staff    @relation(fields: [staffId], references: [id])
+
+  @@unique([tenantId, staffId, period])
+  @@index([tenantId])
+  @@index([staffId, period])
+  @@map("staff_performance_metrics")
+}
+
+model DisciplinaryAction {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  staffId         String   @map("staff_id")
+  type            String   @map("type") // LATE, UNIFORM, ABANDON, etc.
+  description     String   @map("description")
+  severity        String   @default("LOW") @map("severity")
+  evidenceUris    String[] @default([]) @map("evidence_uris")
+  actionTaken     String?  @map("action_taken")
+  occurredAt      DateTime @default(now()) @map("occurred_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  staff           Staff    @relation(fields: [staffId], references: [id])
+
+  @@index([tenantId])
+  @@index([staffId])
+  @@map("disciplinary_actions")
+}
+
+model Audit {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  auditorId       String   @map("auditor_id") // staffId of the auditor
+  siteId          String   @map("site_id")
+  checklist       Json     @map("checklist") // [{ item: string, status: 'PASS' | 'FAIL', note: string }]
+  overallScore    Float    @map("overall_score")
+  evidenceUris    String[] @default([]) @map("evidence_uris")
+  auditorSignature String? @map("auditor_signature")
+  contractorRepresentative String? @map("contractor_representative")
+  locationLat     Float?   @map("location_lat")
+  locationLng     Float?   @map("location_lng")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@map("audits")
+}
+
+model AttendanceRecord {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  staffId     String   @map("staff_id")
+  type        String   @map("type") // CHECK_IN, CHECK_OUT, LIVENESS
+  location    Json?    @map("location") // { lat, lon }
+  imageUri    String?  @map("image_uri")
+  isValid     Boolean  @default(true) @map("is_valid")
+  notes       String?  @map("notes")
+
+  shiftScheduleId   String?   @map("shift_schedule_id")
+  checkInAt         DateTime? @map("check_in_at")
+  checkOutAt        DateTime? @map("check_out_at")
+  workedMinutes     Int?      @map("worked_minutes")
+  lateMinutes       Int?      @default(0) @map("late_minutes")
+  earlyLeaveMinutes Int?      @default(0) @map("early_leave_minutes")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  staff       Staff    @relation(fields: [staffId], references: [id])
+  shiftSchedule ShiftSchedule? @relation(fields: [shiftScheduleId], references: [id])
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, id])
+  @@index([tenantId, shiftScheduleId])
+  @@index([staffId, createdAt(sort: Desc)])
+  @@map("attendance_records")
+}
+
+model PatrolLog {
+  id           String     @id @default(uuid()) @map("id")
+  tenantId     String     @map("tenant_id")
+  staffId      String     @map("staff_id")
+  checkpointId String     @map("checkpoint_id")
+  metadata     Json?      @map("metadata")
+  checkpoint   Checkpoint @relation(fields: [checkpointId], references: [id])
+  staff        Staff      @relation(fields: [staffId], references: [id])
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([tenantId, id])
+  @@index([tenantId, staffId, createdAt(sort: Desc)])
+  @@map("patrol_logs")
+}
+
+model Incident {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  staffId     String   @map("staff_id") // ID of the person who reported
+  type        String   @map("type")
+  severity    IncidentSeverity @default(LOW) @map("severity")
+  severityWeight Int @default(1) @map("severity_weight")
+  description String   @map("description")
+  imageUri    String?  @map("image_uri")
+  location    Json?    @map("location")
+  status      IncidentStatus @default(REPORTED) @map("status")
+  
+  assignedToId String? @map("assigned_to_id")
+  resolutionNotes String? @map("resolution_notes")
+  resolutionImages String[] @default([]) @map("resolution_images")
+  
+  reportedAt  DateTime @default(now()) @map("reported_at")
+  investigatingAt DateTime? @map("investigating_at")
+  resolvedAt  DateTime? @map("resolved_at")
+  closedAt    DateTime? @map("closed_at")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  reporter    Staff    @relation("IncidentReporter", fields: [staffId], references: [id])
+  assignee    Staff?   @relation("IncidentAssignee", fields: [assignedToId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([staffId, createdAt(sort: Desc)])
+  @@index([tenantId, staffId, type, createdAt(sort: Desc)])
+  @@index([tenantId, severityWeight, reportedAt(sort: Desc)])
+  @@index([tenantId, reportedAt(sort: Desc)])
+  @@map("incidents")
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  REPORTED
+  INVESTIGATING
+  ESCALATED
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+
+model SystemConfig {
+  id        String   @id @default("global-config") @map("id")
+  key       String   @unique @map("key")
+  value     Json     @map("value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_configs")
+}
+
+model EventOutbox {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  eventType   String   @map("event_type")
+  payload     Json     @map("payload")
+  status      String   @default("PENDING") @map("status") // PENDING, PROCESSED, FAILED
+  attempts    Int      @default(0) @map("attempts")
+  lastError   String?  @map("last_error")
+  traceId     String?  @map("trace_id")
+  version     String   @default("1.0") @map("version")
+  createdAt   DateTime @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+
+  @@index([status, createdAt])
+  @@index([tenantId])
+  @@map("event_outbox")
+}
+
+model News {
+  id              String   @id @default(uuid()) @map("id")
+  title           String   @map("title")
+  slug            String   @unique @map("slug")
+  content         String   @map("content")
+  excerpt         String?  @map("excerpt")
+  thumbnail       String?  @map("thumbnail")
+  category        String   @default("News") @map("category")
+  author          String   @default("SCMD Pro") @map("author")
+  tags            String[] @default([]) @map("tags")
+  status          String   @default("published") @map("status")
+  publishedAt     DateTime @default(now()) @map("published_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  seoTitle        String?  @map("seo_title")
+  seoDescription  String?  @map("seo_description")
+
+  @@map("news")
+}
+
+model Feedback {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  userId      String   @map("user_id")
+  title       String   @map("title")
+  description String   @map("description")
+  severity    String   @default("LOW") @map("severity")
+  type        String   @default("BUG") @map("type")
+  status      String   @default("OPEN") @map("status")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("feedback")
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model Tenant {
+  id           String   @id @default(uuid()) @map("id")
+  name         String   @map("name")
+  subdomain    String   @unique @map("subdomain")
+  plan         String   @default("TRIAL") @map("plan")
+  subscriptionPlan SubscriptionPlan @default(FREE) @map("subscription_plan")
+  contactEmail String?  @map("contact_email")
+  contactPhone String?  @map("contact_phone")
+  ownerName    String?  @map("owner_name")
+  address      String?  @map("address")
+  maxEmployees Int      @default(5) @map("max_employees")
+  paidUsers    Int      @default(0) @map("paid_users")
+  expiresAt    DateTime? @map("expires_at")
+  status       String   @default("active") @map("status")
+  featuresEnabled Json?  @map("features_enabled")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  staff        Staff[]
+  subscription   TenantSubscription?
+  images       Image[]
+  usageEvents  TenantUsageEvent[]
+
+  @@map("tenants")
+}
+
+model TenantSubscription {
+  id              String    @id @default(cuid())
+  tenantId        String    @unique @map("tenant_id")
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  plan            PlanTier  @default(FREE)
+  paidUsers       Int       @default(0)      @map("paid_users")
+  activeUsers     Int       @default(0)      @map("active_users")
+  expiresAt       DateTime?                  @map("expires_at")
+  gracePeriodDays Int       @default(3)      @map("grace_period_days")
+  autoDowngrade   Boolean   @default(true)   @map("auto_downgrade")
+
+  createdAt       DateTime  @default(now())  @map("created_at")
+  updatedAt       DateTime  @updatedAt       @map("updated_at")
+
+  payments        BillingPayment[]
+
+  // Index cho scheduler query (plan + expiresAt)
+  @@index([plan, expiresAt])
+  @@map("tenant_subscriptions")
+}
+
+model BillingPayment {
+  id              String        @id @default(cuid())
+  tenantId        String
+  subscription    TenantSubscription @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  paidUsers       Int
+  paidMonths      Int
+  amountVnd       BigInt        // LUÔN tự tính server-side: paidUsers * paidMonths * 99000
+
+  status          PaymentStatus @default(PENDING)
+  paymentRef      String?
+  paidAt          DateTime?
+  activatedAt     DateTime?
+  activatedBy     String?       // staffId Super Admin
+  note            String?
+
+  periodStart     DateTime?
+  periodEnd       DateTime?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([tenantId, paymentRef])   // chống duplicate payment cùng mã CK
+  @@index([tenantId])
+  @@index([status])
+  @@index([periodEnd])               // scheduler check expiry
+  @@map("billing_payments")
+}
+
+enum PlanTier {
+  FREE
+  PRO
+  PRO_MAX
+}
+
+enum PaymentStatus {
+  PENDING    // SA đã nhập, chưa xác nhận
+  ACTIVE     // đang chạy
+  EXPIRED    // hết hạn tự nhiên
+  CANCELLED  // huỷ thủ công bởi SA
+  FAILED     // lỗi kích hoạt (future-proof)
+  REFUNDED   // hoàn tiền (future-proof)
+}
+
+
+model AuditLog {
+  id        String   @id @default(uuid()) @map("id")
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  action    String   @map("action")
+  resource  String   @map("resource")
+  payload   Json?    @map("payload")
+  diff      Json?    @map("diff")
+  ip        String?  @map("ip")
+  userAgent String?  @map("user_agent")
+  status    String   @map("status")
+  traceId   String?  @map("trace_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  timestamp BigInt   @map("timestamp")
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status, createdAt])
+  @@index([action, status, createdAt])
+  @@index([tenantId, action, status, createdAt(sort: Desc)])
+  @@index([tenantId, action, createdAt(sort: Desc)])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model Idempotency {
+  key       String   @id @map("idemp_key")
+  result    Json     @map("result")
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @map("id")
+  tenantId  String   @map("tenant_id")
+  userId    String?  @map("user_id") // Nếu NULL là thông báo cho toàn bộ Admin của Tenant
+  title     String   @map("title")
+  message   String   @map("message")
+  type      String   @map("type") // INFO, WARNING, CRITICAL, SOS, AI_ANOMALY
+  status    String   @default("UNREAD") @map("status") // UNREAD, READ, ARCHIVED
+  metadata  Json?    @map("metadata")
+  createdAt DateTime @default(now()) @map("created_at")
+  readAt    DateTime? @map("read_at")
+
+  @@index([tenantId, userId, status, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("notifications")
+}
+
+model Vendor {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  name            String   @map("name")
+  address         String?  @map("address")
+  managerName     String?  @map("manager_name")
+  contactPerson   String   @map("contact_person")
+  email           String   @map("email")
+  phone           String   @map("phone")
+  score           Float    @default(100.0) @map("score")
+  status          String   @default("active") @map("status")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  contracts       Contract[]
+
+  @@index([tenantId])
+  @@map("vendors")
+}
+
+model Contract {
+  id                    String   @id @default(uuid()) @map("id")
+  tenantId              String   @map("tenant_id")
+  vendorId              String   @map("vendor_id")
+  siteName              String   @map("site_name")
+  startDate             DateTime @map("start_date")
+  endDate               DateTime @map("end_date")
+  value                 Decimal  @map("value")
+  currency              String   @default("VND") @map("currency")
+  guardCountPerShift    Int      @map("guard_count_per_shift")
+  status                String   @default("active") @map("status")
+  slaConfig             Json     @map("sla_config")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  vendor                Vendor   @relation(fields: [vendorId], references: [id])
+  complianceScores     ComplianceScore[]
+
+  @@index([tenantId])
+  @@index([vendorId])
+  @@map("contracts")
+}
+
+model ComplianceScore {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  contractId      String   @map("contract_id")
+  vendorId        String   @map("vendor_id")
+  month           String   @map("month")
+  patrolRate      Float    @map("patrol_rate")
+  incidentRate    Float    @map("incident_rate")
+  disciplineRate  Float    @map("discipline_rate")
+  totalScore      Float    @map("total_score")
+  violationsCount Int      @map("violations_count")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  contract        Contract @relation(fields: [contractId], references: [id])
+
+  @@index([tenantId, vendorId, month(sort: Desc)])
+  @@index([contractId])
+  @@map("compliance_scores")
+}
+
+model ShiftSchedule {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  contractId      String   @map("contract_id")
+  date            String   @map("date") // YYYY-MM-DD
+  shiftType       String   @map("shift_type") // MORNING, AFTERNOON, NIGHT
+  startTime       String   @map("start_time") // HH:mm
+  endTime         String   @map("end_time") // HH:mm
+  requiredCount   Int      @map("required_count")
+  positionName    String   @map("position_name")
+  siteId          String   @map("site_id")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  attendanceRecords AttendanceRecord[]
+  complianceItems   ShiftComplianceItem[]
+
+  @@index([tenantId, date])
+  @@index([contractId])
+  @@index([date, shiftType])
+  @@map("shift_schedules")
+}
+
+model ShiftComplianceItem {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  shiftScheduleId String   @map("shift_schedule_id")
+  contractId      String   @map("contract_id")
+  date            String   @map("date") // YYYY-MM-DD
+  requiredCount   Int      @map("required_count")
+  actualCount     Int      @map("actual_count")
+  missingCount    Int      @map("missing_count")
+  excessCount     Int      @map("excess_count")
+  complianceRate  Float    @map("compliance_rate")
+  penaltyAmount   Decimal  @default(0) @map("penalty_amount")
+  status          String   @default("PENDING") @map("status") // PENDING, RESOLVED, PENALIZED
+  notes           String?  @map("notes")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  shiftSchedule   ShiftSchedule @relation(fields: [shiftScheduleId], references: [id])
+
+  @@index([tenantId, date])
+  @@index([shiftScheduleId])
+  @@index([contractId, date])
+  @@map("shift_compliance_items")
+}
+
+model MonthlyStrategyInsight {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  month           String   @map("month") // MM/YYYY
+  summary         String   @map("summary")
+  fraudRiskScore  Float    @map("fraud_risk_score")
+  fraudDetails    Json?    @map("fraud_details")
+  efficiencyScore Float    @map("efficiency_score")
+  topPerformers   Json?    @map("top_performers")
+  criticalIssues  Json?    @map("critical_issues")
+  recommendations Json?    @map("recommendations")
+  fullPayload     Json?    @map("full_payload")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, month])
+  @@index([tenantId])
+  @@map("monthly_strategy_insights")
+}
+
+model Attachment {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  name        String   @map("name")
+  url         String   @map("url")
+  fileType    String   @map("file_type")
+  size        Int      @map("size")
+  category    String   @default("UNSPECIFIED") @map("category")
+  tags        String[] @default([]) @map("tags")
+  uploadedBy  String   @map("uploaded_by")
+  metadata    Json?    @map("metadata")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, category])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("attachments")
+}
+
+enum ImageStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  DELETING
+  DELETED
+  CORRUPTED
+}
+
+model Image {
+  id          String      @id @default(uuid()) @map("id")
+  tenantId    String      @map("tenant_id")
+  key         String      @unique @map("key")
+  hash        String      @map("hash")
+  sizeBytes   BigInt      @map("size_bytes")
+  mimeType    String      @map("mime_type")
+  status      ImageStatus @default(PENDING) @map("status")
+  
+  variants    Json?       @map("variants")
+  tags        String[]    @default([]) @map("tags")
+  
+  expiresAt   DateTime?   @map("expires_at")
+  deletedAt   DateTime?   @map("deleted_at")
+  purgedAt    DateTime?   @map("purged_at")
+  
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([hash, tenantId])
+  @@index([tenantId, expiresAt])
+  @@map("images")
+}
+
+model TenantUsageEvent {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  eventType   String   @map("event_type") // IMAGE_UPLOADED, IMAGE_DELETED
+  deltaBytes  BigInt   @map("delta_bytes")
+  timestamp   DateTime @default(now()) @map("timestamp")
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, timestamp])
+  @@map("tenant_usage_events")
+}

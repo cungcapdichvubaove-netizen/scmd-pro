@@ -1,0 +1,71 @@
+# SCMD Pro - AI Orchestration Rules
+
+CRITICAL: AI MUST strictly comply with ALL the rules below when generating or refactoring code. Failure to comply will lead to broken architecture.
+
+## 1. Architectural Integrity (Clean Architecture)
+- **Frontend State (Zustand)**: Use Zustand for high-frequency real-time states (e.g., `nocFeed`). NEVER pollute root components (`TenantAdminDashboard`) with `useState` for streaming data. Prevent cascading re-renders.
+- **Micro-Components**: Prohibit God Components (> 1000 lines). Break complexes UI into isolated Presentation modules (`/components` or `*Tab.tsx`).
+- **Domain First**: Business logic must reside in `src/server/domain/entities` or `src/server/core/use-cases`. Avoid logic in Controllers or Repositories.
+- **Dependency Flow**: Inner circles (Domain/Core) must not depend on outer circles (Infra/API).
+- **Native ESM**: All imports must include the `.js` extension (e.g., `import { x } from './y.js'`). NEVER use `.ts` or omit the extension.
+- **I18n First**: DO NOT hardcode strings in JSX. Always use `t('key')` from `useTranslation`. Every new UI string MUST be defined in `src/lib/i18n.ts`.
+- **Database Migrations**: Manual SQL files (like `rls_setup.sql`) are integrated into `node run-migration.mjs`. This is automated via the `migrate` service in `docker-compose.yml`. ALWAYS ensure migrations run before app startup in production.
+- **Observability**: OpenTelemetry SDK is ENABLED by default in production. Use `traceId` for end-to-end tracing across layers.
+- **AI Integration**: NEVER implement Gemini/AI SDKs on the client side to prevent API Key leaks. Use the server-side `GeminiService` proxy instead. Prefer `gemini-1.5-flash` model.
+- **Worker Queues**: Background tasks MUST be categorized into 'heavy' (concurrency 3) or 'light' (concurrency 30). AI analysis and PDF rendering belong in 'heavy'.
+- **System Monitoring**: Admin monitoring routes MUST be prefixed with `/api/admin/queues`.
+- **Consistent Databases**: Do not use dual DB sources for the same domain model. Eventual consistency is preferred via Outbox Pattern.
+
+## 2. Multi-tenancy & Isolation
+- **Tenant Context**: Every database operation MUST pass through the Prisma isolation layer.
+  - Standard operations: Use `db.withTenant(ctx.tenantId)` or `db.forTenant(ctx.tenantId)`.
+  - Global/System operations: Use `db.system()` explicitly for SuperAdmin or system-wide configs. NEVER use base `prisma` directly.
+- **Tenant ID**: The field `tenant_id` (PostgreSQL) or `tenantId` (Prisma/Application) is MANDATORY for `staff`, `checkpoints`, `patrol_logs`, `reports`, and `incidents`.
+- **Security Spec**: Every mutation must be validated against the "Dirty Dozen" payloads defined in `security_spec.md`.
+- **RBAC**: Enforce permissions like `staff:read`, `staff:write`, `task:read`, `task:write`. `TENANT_ADMIN` cannot touch `SUPER_ADMIN` data.
+
+## 3. Deployment & CI/CD Discipline
+- **Docker Compose Volume Hierarchy**: MUST use anonymous volume for `/app/node_modules` when mounting the root dir as read-only (`:ro`). Prevent `EROFS` during `npm install` or Prisma generate.
+- **Prevent Silent Failures**: NEVER bypass crucial deployment failures. `npx prisma generate || true` is strictly forbidden in Dockerfiles.
+- **Single Responsibility in Migrations**: Separate migration running into a temporary detached Container/Service. NEVER duplicate `npx prisma migrate deploy` inside `entrypoint.sh` if a migration service handles the DB initialization.
+- **Prisma Schema Continuity**: Do not rely completely on binary caches. `schema.prisma` MUST be present and correctly version-matched directly via `package-lock.json` before running a full compose UP.
+
+## 4. UI/UX: Thumb-first & Navy Theme
+- **Theme**: SCMD Pro Navy Professional.
+  - Primary: `#0D1324` (Deep Navy)
+  - Secondary/Accent: `#2563EB` (Primary Blue) or `#4285F4` (Blue 400)
+  - Layout: Dark-mode by default. Backgrounds MUST use `bg-slate-950` or `bg-[#0D1324]`.
+  - Cards: Use `bg-slate-900/50` or `bg-[#1A2133]` with `border-slate-800`.
+- **Thumb-first Layout**:
+  - Critical actions (Bottom sheets, Floating Action Buttons - FAB, Segmented Controls) must be within the thumb zone (bottom 1/3 of the screen).
+  - IMPORTANT: FABs (like QR Scan) MUST be lifted (e.g., `bottom-32` or `-mt-10`) to avoid overlapping with bottom navigation menus.
+  - Use `h-12`, `h-14`, or `h-16` for touch targets (min 48px).
+- **Responsiveness**: Mobile-first approach is NOT optional. Use Tailwind `sm:`, `md:`, `lg:`, `xl:` prefixes religiously. Ensure interactive tables have horizontal scroll or card-view fallback on small screens.
+
+## 4. Resilience & PWA
+- **Circuit Breaker**: Use `opossum` for external calls. Fallback to "Manual Approval" or cached states.
+- **PWA**: Maintain `vite-plugin-pwa` config. Ensure service workers handle offline patrol logging correctly.
+- **Sanitization**: Catch errors and sanitize output (e.g., `AI_CIRCUIT_OPEN`) to avoid exposing internal stack traces.
+
+## 5. Performance
+- **N+1 Avoidance**: Use PostgreSQL `groupBy` or `include` carefully. Use Redis for frequent Idempotency checks.
+- **Tracing**: Ensure `traceId` is propagated in logs and database records for Audit logs.
+- **Validation**: Use **Zod** for any input/output validation. Zero Trust on data input.
+- **Tenant Isolation**: NEVER use `db.system()` if a `tenantId` is available in the context. Prefer `db.forTenant(tenantId)`. `db.system()` is only for infrastructure tasks (metrics, global logs).
+- **Cache Policy**: Use 'Active Invalidation' for status-critical data (e.g. tenant status). When status changes, manually invalidate the cache key `tenant:status:{id}`.
+- **Memory Limits**: Payloads MUST be restricted (e.g. `1mb` for Express). Pagination MUST be cursor-based (`limit` <= 200) instead of `take: 5000`.
+- **Microservices**: All PDF rendering MUST be offloaded to `pdf-service` (port 3001). Never bundle `puppeteer` inside the main API layer.
+
+## 5. Deployment Protocol
+- **Port**: Must listen on `0.0.0.0:3000`.
+- **Scripts**: Use `npm run dev` for integrated startup.
+
+## 6. Model & Logic Lifecycle
+- **Incident Lifecycle**: MUST follow the 4-step state machine: `reported` -> `investigating` -> `resolved` -> `closed`. Never skip `investigating` if an assignee is present.
+- **Audits**: All audit records MUST include `location` (GPS) and a strict relation to a `Vendor` via `targetVendorId`.
+- **Performance Metrics**: Cumulative evaluations MUST use the weighted decay formula (12-month window) where weight `W = 12 - month_index` (current month index 0).
+- **Shift & Attendance**: Use strict `CHECK_IN` and `CHECK_OUT` enums. Always close a `CHECK_IN` inside a Transaction alongside the `CHECK_OUT` creation. Reconciliations only count guards with `workedMinutes >= 30` to avoid phantom logs.
+
+## 7. Documentation Protocol
+- Every significant feature addition MUST be reflected in `DOCUMENTATION.md`, `CHANGELOG.md`, and `HELP_CENTER.md`.
+- Environment variables MUST be documented in `.env.example`.

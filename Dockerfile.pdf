@@ -1,0 +1,27 @@
+# [FIX H-03] Pin version thay vì :latest để build stable trong production
+FROM ghcr.io/puppeteer/puppeteer:22.15.0
+
+USER root
+WORKDIR /app
+
+# Khai báo môi trường để skip download chromium vì image đã có sẵn
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+# [FIX H-03] Chỉ install production dependencies, KHÔNG cài devDependencies
+# pdf-server.js là plain JavaScript — không cần build TypeScript
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --ignore-scripts
+
+# Chỉ copy file cần thiết — KHÔNG copy src/ hay tsconfig* (không cần build)
+COPY scripts/pdf-server.js ./scripts/
+
+# [FIX H-03] Không cần RUN npm run build:backend — pdf-server.js là plain JS
+
+ENV PORT=3001
+EXPOSE 3001
+
+# Chạy non-root theo best practice của base image puppeteer
+USER pptruser
+
+CMD ["node", "scripts/pdf-server.js"]

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiFetch } from '../../../../lib/api';
+import { exportReport, type ReportColumn } from '../utils/reportExport';
 
 /**
  * useDashboardActions — Hook quản lý các hành động nghiệp vụ tại Dashboard
@@ -53,8 +54,47 @@ export function useDashboardActions(setMessage: (msg: any) => void) {
     }
   };
 
-  const onExportPriorities = () => {
-    window.print();
+  const onExportPriorities = (
+    format: 'print' | 'excel' = 'print',
+    tasks: Array<Record<string, any>> = [],
+    context?: { tenantName?: string; generatedBy?: string }
+  ) => {
+    const normalizedRows = (tasks || []).map((task, index) => ({
+      index: index + 1,
+      severity: task.severity === 'CRITICAL' ? 'Khẩn cấp' : 'Cảnh báo',
+      type: task.type === 'SOS' ? 'SOS' : task.type === 'MISSED' ? 'Bỏ sót' : (task.type || 'Khác'),
+      title: task.title || 'Chưa có tiêu đề',
+      description: task.description || 'Không có mô tả',
+      status: task.status || 'Cần xử lý',
+    }));
+
+    const columns: ReportColumn<Record<string, any>>[] = [
+      { key: 'severity', header: 'Mức độ', width: '90px', align: 'center' },
+      { key: 'type', header: 'Loại', width: '90px', align: 'center' },
+      { key: 'title', header: 'Nội dung ưu tiên' },
+      { key: 'description', header: 'Mô tả / bằng chứng' },
+      { key: 'status', header: 'Trạng thái', width: '110px', align: 'center' },
+    ];
+
+    exportReport(
+      format,
+      {
+        title: 'Báo cáo ưu tiên ca trực',
+        subtitle: 'Danh sách sự kiện cần xử lý được tổng hợp từ Command Center',
+        organizationName: context?.tenantName || 'SCMD Pro',
+        unitName: 'Trung tâm điều hành an ninh',
+        reportPeriod: 'Ca trực hiện tại',
+        generatedBy: context?.generatedBy || 'Tenant Admin',
+      },
+      columns,
+      normalizedRows,
+      [
+        { label: 'Tổng ưu tiên', value: normalizedRows.length },
+        { label: 'Khẩn cấp', value: normalizedRows.filter(row => row.severity === 'Khẩn cấp').length },
+        { label: 'Cảnh báo', value: normalizedRows.filter(row => row.severity === 'Cảnh báo').length },
+        { label: 'Nguồn dữ liệu', value: 'Command Center' },
+      ],
+    );
   };
 
   return {

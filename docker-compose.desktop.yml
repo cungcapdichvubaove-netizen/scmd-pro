@@ -35,32 +35,79 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.desktop
+      args:
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+        VITE_API_URL: ${FRONTEND_API_URL:-}
+        VITE_SOCKET_URL: ${FRONTEND_SOCKET_URL:-}
+        VITE_SOCKET_PATH: ${VITE_SOCKET_PATH:-/socket.io}
     container_name: scmd-desktop-app
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       # Được set tự động bởi reset-desktop.sh / Reset-Desktop.bat
       - AUTO_SEED=${AUTO_SEED:-false}
+      - SEED_RESET_DEMO_PASSWORDS=${SEED_RESET_DEMO_PASSWORDS:-false}
       # DATABASE_URL dùng hostname nội bộ "db" — phải override ở đây, không đặt trong .env được
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
       - DIRECT_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
       - REDIS_URL=redis://redis:6379/0
+      - PDF_SERVICE_URL=http://pdf:3001
+      # Desktop runs over local HTTP; keep production deployments on AUTH_COOKIE_SECURE=true.
+      - AUTH_COOKIE_SECURE=${DESKTOP_AUTH_COOKIE_SECURE:-false}
+      # Desktop/local package runs a production build, but it is not public traffic by default.
+      # Use DESKTOP_CONTACT_LEAD_TURNSTILE_REQUIRED=true and real Turnstile keys to opt in locally.
+      - CONTACT_LEAD_TURNSTILE_REQUIRED=${DESKTOP_CONTACT_LEAD_TURNSTILE_REQUIRED:-false}
+      - CLOUDFLARE_TURNSTILE_SECRET_KEY=${CLOUDFLARE_TURNSTILE_SECRET_KEY:-}
+      # VITE_* là build-time env của Vite; không để .env runtime cũ làm nhiễu kết quả deploy.
+      # Đổi FRONTEND_API_URL/FRONTEND_SOCKET_URL/VITE_SOCKET_PATH phải rebuild image.
+      - VITE_API_URL=
+      - VITE_SOCKET_URL=
+      - VITE_SOCKET_PATH=${VITE_SOCKET_PATH:-/socket.io}
+      - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY:-}
+      - CONTACT_LEAD_TURNSTILE_TIMEOUT_MS=${CONTACT_LEAD_TURNSTILE_TIMEOUT_MS:-3000}
+      - CONTACT_LEAD_SPAM_RETENTION_DAYS=${CONTACT_LEAD_SPAM_RETENTION_DAYS:-30}
+      - CONTACT_LEAD_RESOLVED_RETENTION_DAYS=${CONTACT_LEAD_RESOLVED_RETENTION_DAYS:-730}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      pdf:
+        condition: service_healthy
     ports:
       - "3000:3000"
+    # FIX [D-01]: start_period=120s < MAX_WAIT=300s (Reset-Desktop.bat)
+    # Migration + Seed mất ~60-90s → 120s là buffer an toàn
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 120s
     volumes:
       - scmd_local_assets:/app/public/assets
+
+  pdf:
+    build:
+      context: .
+      dockerfile: Dockerfile.pdf
+    container_name: scmd-desktop-pdf
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - PDF_PORT=3001
+    expose:
+      - "3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   scmd_local_pgdata:

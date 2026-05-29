@@ -14,22 +14,24 @@ export class NotificationService {
   /**
    * Emits a notification via Socket.io.
    */
-  static emit(input: { tenantId: string; userId?: string; payload: any }) {
-    try {
-      const io = SocketService.getIO();
-      const room = input.userId 
-        ? `user:${input.userId}` 
-        : `tenant:${input.tenantId}`;
+  static async emit(input: { tenantId: string; userId?: string; payload: any }) {
+    const io = SocketService.getIO();
+    const room = input.userId
+      ? `user:${input.userId}`
+      : `tenant:${input.tenantId}`;
 
-      io.to(room).emit('notification', {
-        ...input.payload,
-        timestamp: input.payload.createdAt || new Date().toISOString()
-      });
-      
-      logger.debug({ tenantId: input.tenantId, type: input.payload.type }, 'Notification emitted via socket');
-    } catch (err) {
-      logger.warn({ err }, 'Failed to emit notification via socket');
+    if (!io) {
+      const error = new Error('SOCKET_IO_UNAVAILABLE');
+      logger.error({ err: error, tenantId: input.tenantId, userId: input.userId }, 'Failed to emit notification via socket');
+      throw error;
     }
+
+    io.to(room).emit('notification', {
+      ...input.payload,
+      timestamp: input.payload.createdAt || new Date().toISOString()
+    });
+    
+    logger.debug({ tenantId: input.tenantId, type: input.payload.type }, 'Notification emitted via socket');
   }
 
   /**
@@ -53,11 +55,15 @@ export class NotificationService {
         }
       }, tx);
     } else {
-      setImmediate(() => this.emit({
-        tenantId: input.tenantId,
-        userId: input.userId,
-        payload: notification
-      }));
+      setImmediate(() => {
+        void this.emit({
+          tenantId: input.tenantId,
+          userId: input.userId,
+          payload: notification
+        }).catch((err) => {
+          logger.error({ err, tenantId: input.tenantId, userId: input.userId, notificationId: notification.id }, 'Deferred notification emit failed');
+        });
+      });
     }
 
     return notification;

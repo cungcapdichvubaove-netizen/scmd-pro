@@ -63,6 +63,17 @@ export async function getSyncQueue(): Promise<SyncItem[]> {
   return db.getAll(STORES.SYNC_QUEUE);
 }
 
+export async function getSyncQueueSummary(): Promise<{ pending: number; failed: number; total: number }> {
+  const queue = await getSyncQueue();
+  const failed = queue.filter((item) => item.status === 'FAILED').length;
+
+  return {
+    pending: queue.length - failed,
+    failed,
+    total: queue.length,
+  };
+}
+
 export async function updateSyncItem(item: SyncItem) {
   const db = await initDB();
   return db.put(STORES.SYNC_QUEUE, item);
@@ -88,4 +99,5 @@ export async function clearSyncQueue() {
   const db = await initDB();
   await db.clear(STORES.PENDING_LOCATIONS);
   await db.clear(STORES.PENDING_REPORTS);
+  await db.clear(STORES.SYNC_QUEUE);
 }

@@ -24,13 +24,26 @@ export class PatrolRepository {
         data: {
           staffId: ctx.userId,
           checkpointId,
+          patrolSessionId: metadata.patrolSessionId || null,
+          routeCheckpointId: metadata.routeCheckpointId || null,
+          sequenceActual: metadata.sequenceActual || null,
+          scannedAt: metadata.scannedAt ? new Date(metadata.scannedAt) : new Date(),
+          photoEvidenceIds: Array.isArray(metadata.photoEvidenceIds) ? metadata.photoEvidenceIds : [],
+          note: metadata.note || null,
+          validationStatus: metadata.validationStatus || 'VALID',
+          exceptionCodes: Array.isArray(metadata.exceptionCodes) ? metadata.exceptionCodes : [],
           metadata: metadata || {},
         },
       });
     });
 
-    // Invalidate dashboard and staff logs list
-    await CacheManager.delByPattern(`staff:patrol_logs:${ctx.tenantId}:*`);
+    // Invalidate dashboard and patrol monitoring caches after every scan.
+    await Promise.all([
+      CacheManager.delByPattern(`staff:patrol_logs:${ctx.tenantId}:*`),
+      CacheManager.delByPattern(`dashboard_stats:${ctx.tenantId}*`),
+      CacheManager.delByPattern(`patrol:monitor:${ctx.tenantId}*`),
+      CacheManager.delByPattern(`noc:feed:${ctx.tenantId}*`),
+    ]);
     
     return result;
   }
@@ -96,6 +109,14 @@ export class PatrolRepository {
           id: true,
           checkpointId: true,
           createdAt: true,
+          scannedAt: true,
+          patrolSessionId: true,
+          routeCheckpointId: true,
+          sequenceActual: true,
+          validationStatus: true,
+          exceptionCodes: true,
+          photoEvidenceIds: true,
+          note: true,
           ...(isMobileView ? {} : {
             staffId: true,
             metadata: true,
@@ -119,11 +140,20 @@ export class PatrolRepository {
           checkpointId: l.checkpointId,
           checkpointName: l.checkpoint?.name || 'Điểm lạ',
           createdAt: l.createdAt,
+          scannedAt: l.scannedAt,
+          patrolSessionId: l.patrolSessionId,
+          routeCheckpointId: l.routeCheckpointId,
+          sequenceActual: l.sequenceActual,
+          validationStatus: l.validationStatus,
+          exceptionCodes: l.exceptionCodes || [],
+          photoEvidenceIds: l.photoEvidenceIds || [],
+          note: l.note,
           ...(isMobileView ? {} : {
             staffId: l.staffId,
             staffName: l.staff?.fullName || l.staffId,
-            startTime: l.createdAt,
-            isSuspicious: !!l.metadata?.isSuspicious,
+            startTime: l.scannedAt || l.createdAt,
+            metadata: l.metadata || {},
+            isSuspicious: !!l.metadata?.isSuspicious || l.validationStatus !== 'VALID' || (Array.isArray(l.exceptionCodes) && l.exceptionCodes.length > 0),
             suspicionReason: l.metadata?.suspicionReason,
           })
         })),
@@ -140,9 +170,10 @@ export class PatrolRepository {
     return await CacheManager.wrap(cacheKey, async () => {
       return await db.withTenant(tenantId, async (tx: any) => {
         const rows = await tx.$queryRaw(Prisma.sql`
-          SELECT id, name, status, 
+          SELECT id, name, status, site_id AS "siteId", guard_post_id AS "guardPostId",
                  ST_Y(location::geometry) AS latitude, 
                  ST_X(location::geometry) AS longitude, 
+                 qr_hash AS "qrHash", check_items AS "checkItems",
                  updated_at AS "updatedAt"
           FROM checkpoints
           WHERE tenant_id = ${tenantId}
@@ -153,8 +184,14 @@ export class PatrolRepository {
           id:                     r.id,
           name:                   r.name,
           status:                 r.status,
+          siteId:                 r.siteId,
+          guardPostId:            r.guardPostId,
           latitude:               r.latitude  !== null ? Number(r.latitude)  : 0,
           longitude:              r.longitude !== null ? Number(r.longitude) : 0,
+          qrHash:                 r.qrHash,
+          qr_hash:                r.qrHash,
+          checkItems:             r.checkItems,
+          check_items:            r.checkItems,
           updatedAt:              r.updatedAt,
         }));
       }, { allowRaw: true, readOnly: true });
@@ -177,9 +214,10 @@ export class PatrolRepository {
         
         const rows = cursor 
           ? await tx.$queryRaw(Prisma.sql`
-              SELECT id, name, status, 
+              SELECT id, name, status, site_id AS "siteId", guard_post_id AS "guardPostId",
                      ST_Y(location::geometry) AS latitude, 
                      ST_X(location::geometry) AS longitude, 
+                     qr_hash AS "qrHash", check_items AS "checkItems",
                      updated_at AS "updatedAt"
               FROM checkpoints
               WHERE tenant_id = ${tenantId} AND id > ${cursor}
@@ -187,9 +225,10 @@ export class PatrolRepository {
               LIMIT ${fetchLimit}
             `)
           : await tx.$queryRaw(Prisma.sql`
-              SELECT id, name, status, 
+              SELECT id, name, status, site_id AS "siteId", guard_post_id AS "guardPostId",
                      ST_Y(location::geometry) AS latitude, 
                      ST_X(location::geometry) AS longitude, 
+                     qr_hash AS "qrHash", check_items AS "checkItems",
                      updated_at AS "updatedAt"
               FROM checkpoints
               WHERE tenant_id = ${tenantId}
@@ -205,8 +244,14 @@ export class PatrolRepository {
             id:                     r.id,
             name:                   r.name,
             status:                 r.status,
+            siteId:                 r.siteId,
+            guardPostId:            r.guardPostId,
             latitude:               r.latitude  !== null ? Number(r.latitude)  : 0,
             longitude:              r.longitude !== null ? Number(r.longitude) : 0,
+            qrHash:                 r.qrHash,
+            qr_hash:                r.qrHash,
+            checkItems:             r.checkItems,
+            check_items:            r.checkItems,
             updatedAt:              r.updatedAt,
           })),
           nextCursor: hasMore ? items[items.length - 1].id : null,
@@ -226,7 +271,7 @@ export class PatrolRepository {
         // We MUST use raw SQL to retrieve spatial coordinates from PostGIS geography type.
         const rows: any[] = await tx.$queryRaw(Prisma.sql`
           SELECT
-            id, name, status, qr_hash, check_items,
+            id, name, status, site_id AS "siteId", guard_post_id AS "guardPostId", qr_hash, check_items,
             ST_Y(location::geometry) AS latitude,
             ST_X(location::geometry) AS longitude,
             benchmark_travel_time, benchmark_work_duration,
@@ -240,8 +285,12 @@ export class PatrolRepository {
         const r = rows[0];
         return {
           ...r,
+          qrHash: r.qr_hash,
           qr_hash: r.qr_hash,
+          checkItems: r.check_items,
           check_items: r.check_items,
+          siteId: r.siteId,
+          guardPostId: r.guardPostId,
           latitude: r.latitude !== null ? Number(r.latitude) : 0,
           longitude: r.longitude !== null ? Number(r.longitude) : 0,
           updatedAt: r.updated_at
@@ -257,7 +306,7 @@ export class PatrolRepository {
     await CacheManager.delByPattern(`scmd:cp:list:${tenantId}*`);
 
     return await db.withTenant(tenantId, async (tx: any) => {
-      const { name, latitude, longitude, check_items } = data;
+      const { name, latitude, longitude, siteId, guardPostId, check_items } = data;
       
       // FIX [7.3]: Đảm bảo qr_hash không bao giờ null để tránh vi phạm ràng buộc NOT NULL của DB
       const qr_hash = data.qr_hash || `cp_${crypto.randomBytes(6).toString('hex')}`;
@@ -265,11 +314,13 @@ export class PatrolRepository {
       // We must use raw SQL because the 'location' geography field is Unsupported in Prisma DSL.
       // Explicitly using Prisma.sql to prevent SQL injection in raw query context.
       const result: any[] = await tx.$queryRaw(Prisma.sql`
-        INSERT INTO "checkpoints" ("id", "tenant_id", "name", "qr_hash", "check_items", "location", "created_at", "updated_at")
+        INSERT INTO "checkpoints" ("id", "tenant_id", "name", "site_id", "guard_post_id", "qr_hash", "check_items", "location", "created_at", "updated_at")
         VALUES (
           gen_random_uuid(), 
           ${tenantId}, 
           ${name}, 
+          ${siteId || null},
+          ${guardPostId || null},
           ${qr_hash}, 
           ${check_items ? JSON.stringify(check_items) : null}::jsonb,
           ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography,
@@ -285,7 +336,11 @@ export class PatrolRepository {
         id: r.id,
         name: r.name,
         status: r.status,
+        siteId: r.site_id,
+        guardPostId: r.guard_post_id,
+        qrHash: r.qr_hash,
         qr_hash: r.qr_hash,
+        checkItems: r.check_items,
         check_items: r.check_items,
         latitude: latitude, // Trả về giá trị input vì RETURNING location là binary
         longitude: longitude,
@@ -308,13 +363,15 @@ export class PatrolRepository {
     ]);
 
     return await db.withTenant(tenantId, async (tx: any) => {
-      const { name, latitude, longitude, qr_hash, check_items } = data;
+      const { name, latitude, longitude, siteId, guardPostId, qr_hash, check_items } = data;
       
       if (latitude !== undefined && longitude !== undefined) {
         await tx.$executeRaw(Prisma.sql`
           UPDATE "checkpoints"
           SET 
             "name" = COALESCE(${name}, "name"),
+            "site_id" = COALESCE(${siteId || null}, "site_id"),
+            "guard_post_id" = COALESCE(${guardPostId || null}, "guard_post_id"),
             "qr_hash" = COALESCE(${qr_hash}, "qr_hash"),
             "check_items" = COALESCE(${check_items ? JSON.stringify(check_items) : null}::jsonb, "check_items"),
             "location" = ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography,
@@ -326,6 +383,8 @@ export class PatrolRepository {
           UPDATE "checkpoints"
           SET 
             "name" = COALESCE(${name}, "name"),
+            "site_id" = COALESCE(${siteId || null}, "site_id"),
+            "guard_post_id" = COALESCE(${guardPostId || null}, "guard_post_id"),
             "qr_hash" = COALESCE(${qr_hash}, "qr_hash"),
             "check_items" = COALESCE(${check_items ? JSON.stringify(check_items) : null}::jsonb, "check_items"),
             "updated_at" = NOW()
@@ -393,7 +452,8 @@ export class PatrolRepository {
     checkpointId: string,
     currentLat: number,
     currentLng: number,
-    accuracy?: number
+    accuracy?: number,
+    radiusMeters: number = PATROL_PROXIMITY_METERS
   ): Promise<boolean> {
     // FAIL-FAST TENANT ISOLATION
     if (!tenantId) {
@@ -415,7 +475,7 @@ export class PatrolRepository {
           AND ST_DWithin(
             "location",
             ST_SetSRID(ST_MakePoint(${currentLng}, ${currentLat}), 4326)::geography,
-            LEAST(GREATEST(${PATROL_PROXIMITY_METERS}, ${accuracy || 0}), 500)
+            LEAST(GREATEST(${radiusMeters}, ${accuracy || 0}), 500)
           )
         LIMIT 1;
       `);

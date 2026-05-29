@@ -15,6 +15,8 @@ export interface PresignedUploadResult {
 export interface StorageProvider {
   name: string;
   upload(file: Buffer, path: string, options?: any): Promise<UploadResult>;
+  download?(publicId: string): Promise<Buffer>;
   delete(publicId: string): Promise<void>;
+  changeStorageClass?(publicId: string, storageClass: 'STANDARD' | 'COLD'): Promise<void>;
   getPresignedUpload?(path: string, options?: any): Promise<PresignedUploadResult>;
 }

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Sparkles, 
-  ShieldAlert, 
-  Map as MapIcon, 
-  TrendingUp, 
+import {
+  Sparkles,
+  ShieldAlert,
+  Map as MapIcon,
+  TrendingUp,
   AlertTriangle,
   ArrowRight,
   RefreshCcw,
@@ -12,7 +12,9 @@ import {
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../../../lib/utils';
-import { getAuthHeaders } from '../../../common/utils/auth';
+import { apiFetch } from '../../../../lib/api';
+import { useAuthStore } from '../../../common/store/useAuthStore';
+import { useDashboardStore } from '../../store/useDashboardStore';
 
 interface BlindSpot {
   locationId: string;
@@ -35,29 +37,48 @@ interface AnalysisData {
 
 export const PredictiveInsights: React.FC = () => {
   const { t } = useTranslation();
+  const tenantId = useAuthStore((state) => state.tenantId);
+  const tenantInfo = useDashboardStore((state) => state.tenantInfo);
   const [data, setData] = useState<AnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const predictiveGuardEnabled = tenantInfo?.resolvedFeatures?.predictive_guard === true;
+  const canFetch = Boolean(tenantId && predictiveGuardEnabled);
+
   const fetchAnalysis = async () => {
+    if (!canFetch) {
+      setData(null);
+      setError('AI dự báo chưa khả dụng cho tenant hoặc phiên hiện tại.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/security/patrol/predictive-analysis', {
-        headers: getAuthHeaders()
+      const result = await apiFetch<AnalysisData>('/api/security/patrol/predictive-analysis', {
+        suppressErrorToast: true,
       });
-      if (!res.ok) throw new Error(t('common.invalid_request'));
-      setData(await res.json());
+      setData(result);
     } catch (err: any) {
-      setError(err.message);
+      if (err?.status === 401) {
+        setError('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.');
+      } else if (err?.status === 403 && err?.message === 'FEATURE_DISABLED') {
+        setError('AI dự báo chưa được bật cho tenant hiện tại.');
+      } else if (err?.status === 403 && err?.message === 'FEATURE_DEPENDENCY_MISSING') {
+        setError('AI dự báo đang bị chặn do thiếu feature phụ thuộc bắt buộc.');
+      } else {
+        setError(err?.message || t('common.invalid_request'));
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAnalysis();
-  }, []);
+    void fetchAnalysis();
+  }, [canFetch]);
 
   if (loading) {
     return (

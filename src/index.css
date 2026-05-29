@@ -1,7 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 @config "../tailwind.config.js";
-@import "daisyui/daisyui.css";
+@plugin "daisyui" {
+  themes: false;
+  include: button, input, select, textarea, checkbox, modal, table, loading;
+}
 @plugin "@tailwindcss/typography";
 
 @theme {
@@ -9,7 +12,16 @@
   --color-scmd-slate: #1A2133;
   --color-scmd-cyber: #2563EB;
   --color-scmd-safety: #10B981;
-  --color-scmd-alert: #EF4444;
+  --color-scmd-alert:   #EF4444;
+  --color-scmd-silver:  #CCD6F6;  /* Bạc phụ, text muted (v1.2.0+) */
+  --color-scmd-danger:  #EF4444;  /* Alias scmd-alert (v1.2.0+) */
+  --color-scmd-surface: #161D2F;  /* Panel surface alias (v1.2.0+) */
+  --color-scmd-admin-panel: #151B2D;
+  --color-scmd-admin-rail: #112240;
+  --color-scmd-admin-sidebar: #1A2133;
+  --color-scmd-admin-text-muted: #CCD6F6;
+  --color-scmd-warning: #F59E0B;  /* Vàng cảnh báo (v1.2.0+) */
+  --color-scmd-accent:  #4285F4;  /* Xanh accent nhạt (v1.2.0+) */
 
   --color-scmd-primary: #2563EB;
   --color-scmd-success: #10B981;
@@ -46,7 +58,13 @@
 
     /* === SCMD PRO NAVY THEME (v1.1.5+) === */
     --color-bg:             #0D1324; /* Deep Navy */
+    --color-bg-deep:        #070B16;
+    --color-bg-soft:        #101827;
+    --color-bg-raised:      rgba(15, 23, 42, 0.78);
     --color-surface:        #161D2F; /* Sub-panel color */
+    --color-admin-panel:    #151B2D; /* Super Admin analytics panels */
+    --color-admin-rail:     #112240; /* Super Admin billing rail/table surface */
+    --color-admin-sidebar:  #1A2133; /* Super Admin sidebar / elevated icon surface */
     --color-border:         #232D45; /* Darker Blue-Gray Border */
     --color-text-primary:   #FFFFFF;
     --color-text-secondary: #CCD6F6; /* Light Silver */
@@ -111,12 +129,18 @@
     --color-scmd-accent: var(--color-primary-accent);
     --color-scmd-navy: var(--color-header);
     --color-scmd-slate: var(--color-surface);
+    --color-scmd-admin-panel: var(--color-admin-panel);
+    --color-scmd-admin-rail: var(--color-admin-rail);
+    --color-scmd-admin-sidebar: var(--color-admin-sidebar);
+    --color-scmd-admin-text-muted: var(--color-text-secondary);
     --color-scmd-gray-600: var(--color-text-secondary);
     --color-scmd-gray-50: var(--color-bg);
     --color-scmd-success: var(--color-success);
     --color-scmd-warning: var(--color-warning);
     --color-scmd-error: var(--color-danger);
-    --color-scmd-silver: var(--gray-300);
+    --color-scmd-silver:  var(--color-text-secondary); /* fix: was --gray-300 (too dark) */
+    --color-scmd-danger:  var(--color-danger);
+    --color-scmd-surface: var(--color-surface);
     --color-scmd-cyber: var(--color-primary);
     --color-scmd-safety: var(--color-success);
     --color-scmd-alert: var(--color-danger);
@@ -139,6 +163,9 @@
   body {
     @apply bg-[var(--color-bg)] text-[var(--color-text-primary)] antialiased;
     font-family: var(--font-sans);
+    background:
+      radial-gradient(circle at 18% -10%, rgba(37, 99, 235, 0.10), transparent 34%),
+      linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-deep) 100%);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -147,6 +174,28 @@
 
   p, span, div {
     @apply leading-relaxed;
+  }
+
+  .leaflet-tile-pane {
+    filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+  }
+
+  .leaflet-container {
+    background: #020617 !important;
+    border: none !important;
+  }
+
+  .leaflet-bar a {
+    background-color: rgba(15, 23, 42, 0.8) !important;
+    color: #38bdf8 !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(8px);
+  }
+
+  .leaflet-control-attribution {
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.2) !important;
+    font-size: 8px !important;
   }
 }
 
@@ -275,4 +324,203 @@
 
 .technical-flow-line {
   animation: dash-flow 2s linear infinite !important;
+}
+
+@layer components {
+  .scmd-enterprise-shell {
+    position: relative;
+    background:
+      radial-gradient(circle at 18% -8%, rgba(37,99,235,0.11), transparent 30%),
+      radial-gradient(circle at 92% 10%, rgba(16,185,129,0.045), transparent 28%),
+      linear-gradient(180deg, #0d1324 0%, #0a1020 52%, #070b16 100%);
+  }
+
+  .scmd-enterprise-shell::before,
+  .scmd-enterprise-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .scmd-enterprise-shell::before {
+    z-index: 0;
+    opacity: 0.42;
+    background:
+      linear-gradient(rgba(148,163,184,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148,163,184,0.035) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent 72%);
+  }
+
+  .scmd-enterprise-shell::after {
+    z-index: 0;
+    background:
+      radial-gradient(circle at center, transparent 42%, rgba(2,6,23,0.28) 100%),
+      linear-gradient(180deg, rgba(255,255,255,0.018), transparent 24%);
+    mix-blend-mode: normal;
+  }
+
+  .scmd-enterprise-shell > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .scmd-enterprise-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.06;
+    background-image:
+      linear-gradient(rgba(148,163,184,0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148,163,184,0.12) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent 72%);
+  }
+
+  .scmd-enterprise-surface {
+    background:
+      linear-gradient(180deg, rgba(15,23,42,0.82), rgba(8,13,27,0.78));
+    border-color: rgba(148,163,184,0.10);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .scmd-enterprise-header {
+    background:
+      linear-gradient(180deg, rgba(8,13,27,0.92), rgba(8,13,27,0.82));
+    box-shadow: 0 1px 0 rgba(148,163,184,0.08);
+  }
+
+  @media (max-width: 768px) {
+    .scmd-enterprise-shell {
+      background:
+        radial-gradient(circle at 20% -12%, rgba(37,99,235,0.08), transparent 28%),
+        linear-gradient(180deg, #0d1324 0%, #070b16 100%);
+    }
+
+    .scmd-enterprise-shell::before {
+      opacity: 0.025;
+      background-size: 32px 32px;
+    }
+
+    .scmd-enterprise-shell::after {
+      background: linear-gradient(180deg, transparent, rgba(2,6,23,0.22));
+    }
+  }
+
+  .scmd-filter-chip {
+    @apply inline-flex h-9 items-center gap-2 rounded-[10px] border border-white/8 bg-white/[0.035] px-3 text-xs font-semibold text-scmd-silver/78 transition-colors hover:border-scmd-primary/25 hover:bg-white/[0.055] hover:text-white;
+  }
+
+  .scmd-compact-panel {
+    @apply rounded-[16px] border border-white/8 bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)];
+  }
+
+  .scmd-status-dot-live {
+    @apply h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.55)];
+  }
+
+  .ops-filter-control {
+    @apply inline-flex h-9 items-center gap-2 rounded-[10px] border border-slate-200/10 bg-white/[0.035] px-3 text-[12px] font-semibold text-slate-300 transition-colors hover:border-blue-400/25 hover:bg-white/[0.055] hover:text-white;
+  }
+
+  .ops-primary-action {
+    @apply inline-flex h-9 items-center gap-2 rounded-[10px] border border-blue-400/25 bg-blue-500/12 px-3 text-[12px] font-semibold text-blue-100 transition-colors hover:bg-blue-500/18;
+  }
+
+  .ops-icon-action {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-slate-200/10 bg-white/[0.035] text-slate-300 transition-colors hover:border-blue-400/25 hover:bg-white/[0.055] hover:text-white;
+  }
+
+  .ops-filter-select {
+    @apply h-9 min-w-[150px] rounded-[10px] border border-slate-200/10 bg-slate-950/35 px-3 text-[12px] font-semibold text-slate-300 outline-none transition-colors hover:border-blue-400/20 focus:border-blue-400/35 focus:ring-2 focus:ring-blue-500/10;
+  }
+
+  .ops-data-card {
+    @apply rounded-[14px] border border-slate-200/10 bg-white/[0.035] p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] transition-colors hover:border-blue-400/20 hover:bg-white/[0.05];
+  }
+
+  .ops-status-badge {
+    @apply inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold;
+  }
+
+  .ops-progress-track {
+    @apply h-1.5 overflow-hidden rounded-full bg-slate-700/50;
+  }
+
+  .ops-progress-fill {
+    @apply h-full rounded-full bg-blue-400;
+  }
+
+  .ops-main-content {
+    @apply space-y-5 text-slate-200;
+  }
+
+  .ops-main-content > * {
+    @apply max-w-full;
+  }
+
+  .ops-main-content :where(section, article, div)[class*="rounded-[32px]"],
+  .ops-main-content :where(section, article, div)[class*="rounded-[40px]"],
+  .ops-main-content :where(section, article, div)[class*="rounded-[2rem]"],
+  .ops-main-content :where(section, article, div)[class*="rounded-[2.5rem]"],
+  .ops-main-content :where(section, article, div).rounded-3xl {
+    border-radius: 14px !important;
+  }
+
+  .ops-main-content :where(section, article, div)[class*="shadow-2xl"],
+  .ops-main-content :where(section, article, div)[class*="shadow-xl"],
+  .ops-main-content :where(section, article, div)[class*="shadow-[0_22px"],
+  .ops-main-content :where(section, article, div)[class*="shadow-[0_18px"] {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  }
+
+  .ops-main-content :where(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid rgba(96,165,250,0.72);
+    outline-offset: 2px;
+  }
+
+  .ops-main-content :where(table) {
+    @apply w-full text-left text-[13px];
+  }
+
+  .ops-main-content :where(th) {
+    @apply border-b border-white/8 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500;
+  }
+
+  .ops-main-content :where(td) {
+    @apply border-b border-white/6 px-3 py-3 text-slate-300;
+  }
+
+  .ops-main-content :where(input, select, textarea) {
+    color-scheme: dark;
+  }
+
+  .ops-main-content :where(.bg-gradient-to-br, .bg-gradient-to-r, .bg-gradient-to-b) {
+    background-image: none !important;
+  }
+
+  .ops-main-content :where([class*="hover:scale"], [class*="active:scale"], [class*="scale-105"], [class*="scale-95"]) {
+    transform: none !important;
+  }
+
+  .ops-main-content :where([class*="tracking-widest"], [class*="tracking-[0.2em]"], [class*="tracking-[0.3em]"]) {
+    letter-spacing: 0.06em !important;
+  }
+
+  .ops-main-content :where(.font-black) {
+    font-weight: 700;
+  }
+
+  .ops-main-content :where(.rounded-[48px], .rounded-[40px], .rounded-[32px], .rounded-[28px], .rounded-[24px], .rounded-[20px]) {
+    border-radius: 14px !important;
+  }
+
+  .ops-main-content :where(.shadow-scmd-deep, .shadow-scmd-glow, .shadow-lg, .shadow-xl, .shadow-2xl) {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  }
+
+  .ops-main-content :where(.animate-pulse) {
+    animation-duration: 2.4s;
+  }
 }

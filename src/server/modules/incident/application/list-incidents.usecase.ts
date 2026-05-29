@@ -11,6 +11,15 @@ export interface ListIncidentsInput {
   view?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  priorityOnly?: boolean;
+  severity?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  assigneeId?: string;
+  siteId?: string;
+  vendorId?: string;
+  contractId?: string;
 }
 
 export class ListIncidentsUseCase {
@@ -21,7 +30,7 @@ export class ListIncidentsUseCase {
   }
 
   async execute(ctx: SecurityContext, input: ListIncidentsInput) {
-    const { status, type, limit = 50, cursor, view, sortBy, sortOrder = 'desc' } = input;
+    const { status, type, limit = 50, cursor, view, sortBy, sortOrder = 'desc', priorityOnly = false, severity, dateFrom, dateTo, search, assigneeId, siteId, vendorId, contractId } = input;
     
     const isMobile = view === 'mobile';
     
@@ -34,21 +43,31 @@ export class ListIncidentsUseCase {
       }
     }
 
-    const { items, hasMore, limit: actualLimit } = await this.repository.list(ctx.tenantId, {
+    const { items, hasMore, limit: actualLimit, summary } = await this.repository.list(ctx, {
       status: statusEnum,
       type,
       limit,
       cursor,
       sortBy,
       sortOrder,
-      isMobile
+      isMobile,
+      priorityOnly,
+      severity,
+      dateFrom,
+      dateTo,
+      search,
+      assigneeId,
+      siteId,
+      vendorId,
+      contractId,
     });
 
     return {
       items,
       hasMore,
       limit: actualLimit,
-      nextCursor: hasMore ? (items.length > 0 ? items[items.length - 1].id : null) : null
+      nextCursor: hasMore ? (items.length > 0 ? items[items.length - 1].id : null) : null,
+      summary
     };
   }
 }

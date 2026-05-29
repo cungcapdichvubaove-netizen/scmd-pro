@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, ArrowRight, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Shield, ArrowRight, AlertTriangle, ShieldCheck, Building2 } from 'lucide-react';
 import { SCMDButton } from '../../common/interfaces/components/SCMDButton';
 import { SCMDInput } from '../../common/interfaces/components/SCMDInput';
 import { SCMDLogo } from '../../common/interfaces/components/SCMDLogo';
-import { setAuthToken } from '../../common/utils/auth';
 import { loginAPI } from '../../../services/auth.service';
 import ReCAPTCHA from 'react-google-recaptcha';
 
@@ -46,7 +45,7 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenantName, initialTen
     setError('');
 
     if (!tenantCode.trim()) {
-      setError('Vui lòng nhập mã công ty (Tenant Code). Ví dụ: demo, admin');
+      setError('Vui lòng nhập mã doanh nghiệp. Ví dụ: ktcsecurity');
       return;
     }
     
@@ -79,9 +78,9 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenantName, initialTen
         recaptchaToken: recaptchaToken || undefined
       });
 
-      setAuthToken(data.token);
-      localStorage.setItem('scmd_refresh_token', data.refreshToken);
-      onLogin({ ...data.user, token: data.token });
+      localStorage.removeItem('scmd_jwt');
+      localStorage.removeItem('scmd_refresh_token');
+      onLogin(data.user);
     } catch (err: any) {
       setError(err.message);
       fetchCaptcha();
@@ -102,7 +101,7 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenantName, initialTen
         <div className="flex flex-col items-center justify-center mb-10">
           <SCMDLogo variant="dark" size="lg" className="mb-6 flex-col gap-6" />
           <h1 className="text-3xl font-black text-white tracking-tight mb-2">{tenantName}</h1>
-          <p className="text-[var(--color-text-muted)] font-medium">Hệ thống Quản lý An ninh SCMD</p>
+          <p className="text-[var(--color-text-muted)] font-medium text-center">Đăng nhập workspace giám sát dịch vụ bảo vệ</p>
         </div>
 
         <div className="bg-[var(--color-surface)]/5 backdrop-blur-xl border border-[var(--color-border)]/10 p-8 rounded-[var(--radius-xl)] shadow-2xl">
@@ -116,18 +115,18 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenantName, initialTen
 
             <div>
               <label className="block text-[10px] font-black text-[var(--color-text-secondary)] uppercase tracking-[0.2em] mb-3 ml-1">
-                Mã công ty (Tenant Code)
+                Workspace / Mã doanh nghiệp
               </label>
               <SCMDInput 
                 type="text" 
-                placeholder="Ví dụ: demo, acme" 
+                placeholder="Ví dụ: ktcsecurity"
                 value={tenantCode}
-                onChange={(e) => setTenantCode(e.target.value.toLowerCase().trim())}
+                onChange={(e) => setTenantCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                 required
                 className={`bg-[var(--color-surface)]/5 border-[var(--color-border)]/20 text-white placeholder:text-[var(--color-text-muted)] font-mono ${!tenantCode ? 'border-amber-500/50' : ''}`}
               />
-              <p className="text-[11px] text-[var(--color-text-secondary)] mt-1.5 ml-1">
-                Liên hệ quản trị viên nếu bạn chưa có mã công ty.
+              <p className="text-[11px] text-[var(--color-text-secondary)] mt-1.5 ml-1 flex items-center gap-1.5">
+                <Building2 size={12} /> Nhập workspace cùng tài khoản và mật khẩu trong một bước. Nếu workspace sai, dữ liệu đăng nhập vẫn được giữ nguyên để sửa lại.
               </p>
             </div>
 
@@ -137,7 +136,7 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenantName, initialTen
               </label>
               <SCMDInput 
                 type="text" 
-                placeholder="Ví dụ: spadmin, admin, guard" 
+                placeholder="Ví dụ: admin"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -189,16 +188,34 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenantName, initialTen
               </div>
             )}
 
-            <SCMDButton 
-              type="submit" 
+            <SCMDButton
+              type="submit"
               className="w-full h-14 text-base shadow-lg shadow-[var(--color-primary)]/20 mt-4 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold rounded-[var(--radius-sm)] transition-[var(--transition-base)] uppercase"
               isLoading={isLoading}
             >
-              Đăng nhập an toàn <ArrowRight size={20} className="ml-2" />
+              Đăng nhập workspace <ArrowRight size={20} className="ml-2" />
             </SCMDButton>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-[var(--color-border)]/10 text-center">
+          <div className="mt-8 rounded-[var(--radius-lg)] border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/10 p-4 text-left">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-primary-accent)]">
+              Demo nhanh
+            </p>
+            <p className="mt-2 text-sm font-medium text-white">
+              Workspace: <span className="font-mono font-black">vinhomes</span>
+            </p>
+            <p className="mt-1 text-sm font-medium text-white">
+              Tài khoản: <span className="font-mono font-black">admin_vinhomes</span>
+            </p>
+            <p className="mt-1 text-sm font-medium text-white">
+              Mật khẩu: <span className="font-mono font-black">Demo@2025!</span>
+            </p>
+            <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
+              Workspace `ktcsecurity` / user `admin` chỉ hợp lệ khi môi trường đã chạy seed `ktc-ocb`.
+            </p>
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-[var(--color-border)]/10 text-center">
             <p className="text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-widest flex items-center justify-center gap-2">
               <Shield size={12} />
               Được bảo vệ bởi SCMD Security + Anti-DDoS

@@ -36,6 +36,9 @@ export const useTenantStaff = (
     disciplines: '',
     workHistory: [] as any[],
     email: '',
+    assignedVendorId: '',
+    assignedSiteId: '',
+    assignedContractId: '',
     credentials: { idNumber: '', licenseNumber: '', expiryDate: '' },
   });
 
@@ -44,8 +47,14 @@ export const useTenantStaff = (
     const displayName = s.fullName ?? '';
     setNewStaff({
       fullName: displayName,
-      staffId: s.staffId,
-      role: s.role.toLowerCase() === 'admin' ? 'admin' : s.role.toLowerCase() === 'supervisor' ? 'supervisor' : 'guard',
+      staffId: s.staffId || '',
+      // FIX [BUG-ROLE]: Map đúng 1-1 tất cả role từ backend về form.
+      // Code cũ dùng fallback 'guard' cho mọi role không phải 'admin'/'supervisor',
+      // khiến 'tenant-admin', 'technician', 'super-admin' bị map sai thành 'guard'.
+      // Ngoài ra 'admin' không tồn tại trong Zod enum của backend — chỉ có 'tenant-admin'.
+      role: (['super-admin', 'tenant-admin', 'supervisor', 'guard', 'technician', 'vendor-commander', 'vendor-representative'] as const).includes(s.role as any)
+        ? s.role as any
+        : 'guard',
       username: s.username || '',
       password: '',
       qualifications: Array.isArray(s.qualifications) ? s.qualifications.join(', ') : '',
@@ -54,7 +63,16 @@ export const useTenantStaff = (
       disciplines: s.disciplines || '',
       workHistory: s.workHistory || [],
       email: s.email || '',
-      credentials: s.credentials || { idNumber: '', licenseNumber: '', expiryDate: '' },
+      assignedVendorId: s.assignedVendorId || '',
+      assignedSiteId: s.assignedSiteId || '',
+      assignedContractId: s.assignedContractId || '',
+      // FIX [BUG-1]: Populate credentials từ flat fields của Staff (idNumber, licenseNumber, idExpiry)
+      // Staff type dùng nested credentials object ở frontend, nhưng DB trả về flat fields
+      credentials: {
+        idNumber: s.credentials?.idNumber ?? (s as any).idNumber ?? '',
+        licenseNumber: s.credentials?.licenseNumber ?? (s as any).licenseNumber ?? '',
+        expiryDate: s.credentials?.expiryDate ?? (s as any).idExpiry?.split('T')[0] ?? '',
+      },
     });
     setTimeout(() => {
       document.getElementById('staff-form')?.scrollIntoView({ behavior: 'smooth' });
@@ -66,7 +84,7 @@ export const useTenantStaff = (
     setNewStaff({
       fullName: '', staffId: '', role: 'guard', username: '', password: '', 
       qualifications: '', certificates: '', rewards: '', disciplines: '', 
-      workHistory: [], email: '', 
+      workHistory: [], email: '', assignedVendorId: '', assignedSiteId: '', assignedContractId: '',
       credentials: { idNumber: '', licenseNumber: '', expiryDate: '' },
     });
   }, []);
@@ -75,8 +93,12 @@ export const useTenantStaff = (
     e.preventDefault();
     setIsSubmittingStaff(true);
     try {
+      // FIX [BUG-1]: Flatten credentials object → top-level fields trước khi gửi lên server
+      // Backend updateStaffSchema kỳ vọng idNumber/licenseNumber/idExpiry ở cấp cao nhất,
+      // không phải lồng trong credentials: { idNumber, licenseNumber, expiryDate }
+      const { credentials, ...rest } = newStaff;
       const payload = {
-        ...newStaff,
+        ...rest,
         email: newStaff.email,
         qualifications: typeof newStaff.qualifications === 'string'
             ? newStaff.qualifications.split(',').map((s) => s.trim()).filter(Boolean)
@@ -84,7 +106,15 @@ export const useTenantStaff = (
         certificates: typeof newStaff.certificates === 'string'
             ? newStaff.certificates.split(',').map((s) => s.trim()).filter(Boolean)
             : newStaff.certificates,
+        // Flat fields theo đúng schema backend
+        idNumber: credentials?.idNumber?.trim() || null,
+        licenseNumber: credentials?.licenseNumber?.trim() || null,
+        idExpiry: credentials?.expiryDate || null,
+        assignedVendorId: rest.assignedVendorId || null,
+        assignedSiteId: rest.assignedSiteId || null,
+        assignedContractId: rest.assignedContractId || null,
       };
+
       const url = editingStaff ? `/api/tenant/staff/${editingStaff.id}` : '/api/tenant/staff';
       await apiFetch(url, {
         method: editingStaff ? 'PUT' : 'POST',

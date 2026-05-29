@@ -3,7 +3,8 @@ import {
   updateSyncItem, 
   deleteSyncItem, 
   addSyncLog, 
-  SyncItem 
+  SyncItem,
+  getSyncQueueSummary
 } from './db.js';
 import { apiFetch } from './api.js';
 
@@ -11,17 +12,17 @@ const MAX_RETRY_ATTEMPTS = 5;
 
 export class SyncManager {
   private static isSyncing = false;
-  private static syncListeners: ((status: { pending: number; syncing: boolean; lastError?: string }) => void)[] = [];
+  private static syncListeners: ((status: { pending: number; failed: number; total: number; syncing: boolean; lastError?: string }) => void)[] = [];
 
-  static subscribe(callback: (status: { pending: number; syncing: boolean; lastError?: string }) => void) {
+  static subscribe(callback: (status: { pending: number; failed: number; total: number; syncing: boolean; lastError?: string }) => void) {
     this.syncListeners.push(callback);
     return () => {
       this.syncListeners = this.syncListeners.filter(l => l !== callback);
     };
   }
 
-  private static notify(pending: number, syncing: boolean, lastError?: string) {
-    this.syncListeners.forEach(l => l({ pending, syncing, lastError }));
+  private static notify(pending: number, syncing: boolean, lastError?: string, failed = 0) {
+    this.syncListeners.forEach(l => l({ pending, failed, total: pending + failed, syncing, lastError }));
   }
 
   static async triggerSync() {
@@ -29,17 +30,19 @@ export class SyncManager {
     
     this.isSyncing = true;
     const queue = await getSyncQueue();
-    this.notify(queue.length, true);
+    const activeQueue = queue.filter((item) => item.status !== 'FAILED');
+    const failedCount = queue.length - activeQueue.length;
+    this.notify(activeQueue.length, true, undefined, failedCount);
 
-    if (queue.length === 0) {
+    if (activeQueue.length === 0) {
       this.isSyncing = false;
-      this.notify(0, false);
+      this.notify(0, false, undefined, failedCount);
       return;
     }
 
-    console.log(`[SyncManager] Starting sync for ${queue.length} items`);
+    console.log(`[SyncManager] Starting sync for ${activeQueue.length} active items, ${failedCount} failed items retained`);
     
-    for (const item of queue) {
+    for (const item of activeQueue) {
       if (item.status === 'SYNCING') continue; // Skip if already being processed
 
       try {
@@ -50,8 +53,9 @@ export class SyncManager {
     }
 
     const remainingQueue = await getSyncQueue();
+    const remainingFailed = remainingQueue.filter((item) => item.status === 'FAILED').length;
     this.isSyncing = false;
-    this.notify(remainingQueue.length, false);
+    this.notify(remainingQueue.length - remainingFailed, false, undefined, remainingFailed);
   }
 
   private static async processItem(item: SyncItem) {
@@ -128,7 +132,7 @@ export class SyncManager {
   }
 
   static async getPendingCount(): Promise<number> {
-    const queue = await getSyncQueue();
-    return queue.length;
+    const summary = await getSyncQueueSummary();
+    return summary.total;
   }
 }

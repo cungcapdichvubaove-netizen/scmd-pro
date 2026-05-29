@@ -17,8 +17,8 @@ export const SCMDButton = React.forwardRef<HTMLButtonElement, SCMDButtonProps>(
 
     const sizes = {
       sm: 'px-3 py-1.5 text-xs min-h-[36px]',
-      md: 'px-4 py-2 min-h-[48px]', // 48px touch target
-      lg: 'px-6 py-3 text-[15px] min-h-[56px]', // 56px preferred action target
+      md: 'px-3.5 py-2 min-h-[40px]', // compact enterprise control
+      lg: 'px-5 py-2.5 text-[15px] min-h-[48px]', // primary enterprise action
     };
 
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -35,7 +35,7 @@ export const SCMDButton = React.forwardRef<HTMLButtonElement, SCMDButtonProps>(
         ref={ref}
         disabled={disabled || isLoading}
         className={cn(
-          'inline-flex items-center justify-center gap-[6px] rounded-[var(--radius-sm)] font-semibold text-[13px] transition-[var(--transition-fast)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none',
+          'inline-flex items-center justify-center gap-[6px] rounded-[10px] font-semibold text-[13px] transition-[var(--transition-fast)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none',
           variants[variant],
           sizes[size],
           className

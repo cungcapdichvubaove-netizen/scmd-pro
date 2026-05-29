@@ -1,6 +1,6 @@
 import { db } from '../../../src/server/core/db/prisma.js';
 import { logger } from '../utils/logger.js';
-import { GLOBAL_CONSTANTS } from '../config.ts';
+import { GLOBAL_CONSTANTS } from '../config.js';
 import bcrypt from 'bcryptjs';
 import { SubscriptionPlan } from '@prisma/client';
 
@@ -18,6 +18,7 @@ export async function runMinimalSeed() {
         subdomain: 'system',
         plan: SubscriptionPlan.ENTERPRISE,
         contactEmail: 'admin@scmd.pro',
+        contactPhone: '0900000000',
         ownerName: 'Super Admin',
         maxEmployees: 999,
         status: 'active',
@@ -91,5 +92,20 @@ export async function runMinimalSeed() {
       }
     });
     logger.success('System configs (role_permissions) seeded.');
+
+    // 4. System TenantSubscription (cần thiết để auth middleware không bị lỗi findUnique)
+    await sys.tenantSubscription.upsert({
+      where: { tenantId: GLOBAL_CONSTANTS.SYSTEM_TENANT_ID },
+      update: {},
+      create: {
+        tenantId: GLOBAL_CONSTANTS.SYSTEM_TENANT_ID,
+        plan: 'PRO_MAX' as any,
+        paidUsers: 0,
+        activeUsers: 1,
+        gracePeriodDays: 999,
+        autoDowngrade: false,
+      },
+    });
+    logger.success('System TenantSubscription seeded.');
   });
 }

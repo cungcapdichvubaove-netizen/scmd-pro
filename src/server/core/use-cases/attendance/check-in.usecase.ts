@@ -5,6 +5,7 @@ import { db } from '../../db/prisma.js';
 import { calculateDistance } from '../../../../shared/utils/geo.js';
 import { PatrolRepository } from '../../../modules/patrol/repositories/patrol.repository.js';
 import { logger } from '../../logger/index.js';
+import { getOperationalDayStart, shiftLocalDateTimeToUtc } from '../../time/tenant-time.js';
 import { 
   BadRequestError, 
   ConflictError, 
@@ -35,8 +36,7 @@ export class AttendanceCheckInUseCase {
     }
 
     const { location, imageUri, notes, shiftScheduleId, checkpointId } = validated.data;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getOperationalDayStart();
 
     // 2. Ensure no active open check-in (Tenant Isolation via db.forTenant)
     const existingCheckIn = await db.forTenant(ctx.tenantId).attendanceRecord.findFirst({
@@ -55,15 +55,23 @@ export class AttendanceCheckInUseCase {
     let lateMinutes = 0;
     let isValid = true;
     let suspicionReason: string | null = null;
+    let checkpointDistanceMeters: number | null = null;
 
     // 3. Proximity check (Anti-Fraud GPS)
-    if (checkpointId) {
+    if (!checkpointId) {
+      isValid = false;
+      suspicionReason = 'MISSING_CHECKPOINT: Cannot verify check-in GPS without checkpointId';
+      logger.warn({
+        userId: ctx.userId,
+        tenantId: ctx.tenantId
+      }, 'SUSPICIOUS_GPS: Guard attempted check-in without checkpoint context');
+    } else {
       const checkpoint = await PatrolRepository.getCheckpointById(ctx.tenantId, checkpointId);
       if (!checkpoint) {
         throw new NotFoundError('Điểm check-in (Checkpoint) không tồn tại.');
       }
 
-      const distance = calculateDistance(
+      checkpointDistanceMeters = calculateDistance(
         location.lat, 
         location.lon, 
         (checkpoint as any).latitude, 
@@ -71,12 +79,12 @@ export class AttendanceCheckInUseCase {
       );
 
       // Rule 5.1: Max tolerance < 50m
-      if (distance > 50) {
+      if (checkpointDistanceMeters > 50) {
         isValid = false;
-        suspicionReason = `Vị trí check-in sai lệch ${Math.round(distance)}m (Giới hạn: 50m)`;
+        suspicionReason = `Vị trí check-in sai lệch ${Math.round(checkpointDistanceMeters)}m (Giới hạn: 50m)`;
         logger.warn({ 
           userId: ctx.userId, 
-          distance, 
+          distance: checkpointDistanceMeters, 
           checkpointId 
         }, 'SUSPICIOUS_GPS: Guard attempted check-in from unauthorized distance');
       }
@@ -89,9 +97,7 @@ export class AttendanceCheckInUseCase {
       });
       
       if (shift) {
-        const [year, month, day] = shift.date.split('-').map(Number);
-        const [hours, minutes] = shift.startTime.split(':').map(Number);
-        const shiftStart = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        const shiftStart = shiftLocalDateTimeToUtc(shift.date, shift.startTime);
         
         const now = new Date();
         const diffMs = now.getTime() - shiftStart.getTime();
@@ -119,11 +125,8 @@ export class AttendanceCheckInUseCase {
         metadata: isValid ? {} : {
           isSuspicious: true,
           suspicionReason,
-          distanceMeters: Math.round(calculateDistance(
-            location.lat, 
-            location.lon, 
-            0, 0 // Just for logging if it's suspicious
-          )) // This logic is simplified, real DIST logic above
+          checkpointId: checkpointId || null,
+          distanceMeters: checkpointDistanceMeters !== null ? Math.round(checkpointDistanceMeters) : null
         } as any
       }
     });
@@ -131,4 +134,3 @@ export class AttendanceCheckInUseCase {
     return record;
   }
 }
-

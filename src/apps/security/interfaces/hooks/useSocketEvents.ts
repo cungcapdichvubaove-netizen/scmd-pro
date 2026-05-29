@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import socket from '../../../../lib/socket';
+import { getSocket } from '../../../../lib/socket';
 import { useDashboardStore } from '../../store/useDashboardStore';
 
 export function useSocketEvents(
@@ -18,9 +18,11 @@ export function useSocketEvents(
   })));
 
   useEffect(() => {
+    let cancelled = false;
+    let activeSocket: Awaited<ReturnType<typeof getSocket>> | null = null;
+
     fetchData();
     const tenantId = localStorage.getItem('scmd_tenant_id') || 'tenant_1';
-    socket.emit('join_tenant', tenantId);
 
     const onSosAlert = (data: any) => {
       if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -111,14 +113,26 @@ export function useSocketEvents(
       }
     };
 
-    socket.on('sos_alert', onSosAlert);
-    socket.on('notification', onNotification);
-    socket.on('patrol_update', onPatrolUpdate);
+    const bindSocketEvents = async () => {
+      const socket = await getSocket();
+      if (cancelled) {
+        return;
+      }
+
+      activeSocket = socket;
+      socket.emit('join_tenant', tenantId);
+      socket.on('sos_alert', onSosAlert);
+      socket.on('notification', onNotification);
+      socket.on('patrol_update', onPatrolUpdate);
+    };
+
+    void bindSocketEvents();
 
     return () => {
-      socket.off('sos_alert', onSosAlert);
-      socket.off('patrol_update', onPatrolUpdate);
-      socket.off('notification', onNotification);
+      cancelled = true;
+      activeSocket?.off('sos_alert', onSosAlert);
+      activeSocket?.off('patrol_update', onPatrolUpdate);
+      activeSocket?.off('notification', onNotification);
     };
   }, [setAnomalies, setNocFeed, setActiveSOS, ...dependencies]);
 }

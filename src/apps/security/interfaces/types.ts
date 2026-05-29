@@ -47,14 +47,35 @@ export interface Staff {
     licenseNumber: string;
     expiryDate: string;
   };
+  assignedVendorId?: string | null;
+  assignedSiteId?: string | null;
+  assignedContractId?: string | null;
 }
 
 export interface PatrolRoute {
   id: string;
   name: string;
-  checkpoints: string[];
-  schedule: string;
-  frequency: string;
+  siteId?: string;
+  contractId?: string;
+  vendorId?: string;
+  status?: string;
+  estimatedMinutes?: number;
+  requiredCompletionPercent?: number;
+  repeatIntervalMinutes?: number;
+  complianceConfig?: any;
+  checkpoints: Array<string | {
+    id: string;
+    routeCheckpointId?: string;
+    name?: string;
+    checkpointOrder?: number;
+    isMandatory?: boolean;
+    geoRadiusMeters?: number;
+    gpsRequired?: boolean;
+    photoRequired?: boolean;
+    noteRequired?: boolean;
+  }>;
+  schedule?: string;
+  frequency?: string;
 }
 
 export interface PatrolLog {

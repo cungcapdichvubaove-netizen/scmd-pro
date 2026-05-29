@@ -1,9 +1,10 @@
-import React, { useState, lazy, Suspense } from 'react';
-import { Clock, AlertTriangle, User, ShieldCheck, ClipboardList } from 'lucide-react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
+import { Clock, AlertTriangle, User, ShieldCheck, ClipboardList, Building2, MapPin, CalendarCheck } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { SOSButton } from './components/SOSButton';
 import { motion, AnimatePresence } from 'motion/react';
 import { SCMDSuspense } from '../../common/interfaces/components/SCMDSuspense';
+import { apiFetch } from '../../../lib/api';
 
 import { useAuth } from '../../../context/AuthContext';
 
@@ -18,6 +19,191 @@ type Tab = 'patrol' | 'incident' | 'attendance' | 'tasks' | 'profile';
 interface SecurityDashboardProps {
   user?: { name?: string; staffId?: string; role?: string } | null;
 }
+
+interface GuardProfile {
+  guard: {
+    id: string;
+    fullName: string;
+    staffId: string | null;
+    status: string;
+  };
+  scope: {
+    vendor: { id: string; name: string; status: string } | null;
+    site: { id: string; siteName: string; address: string; status: string } | null;
+    contract: { id: string; contractName: string | null; contractCode: string | null; status: string } | null;
+  };
+  todayShift: {
+    id: string;
+    date: string;
+    shiftType: string;
+    startTime: string;
+    endTime: string;
+    positionName: string;
+    guardPost: { id: string; postName: string; postType?: string | null } | null;
+  } | null;
+  attendanceHistory: Array<{
+    id: string;
+    type: string;
+    createdAt: string;
+    isValid: boolean;
+    lateMinutes: number | null;
+    earlyLeaveMinutes: number | null;
+    shiftSchedule: {
+      id: string;
+      date: string;
+      shiftType: string;
+      siteId: string;
+      guardPost: { id: string; postName: string } | null;
+    } | null;
+  }>;
+  warnings: string[];
+}
+
+const GuardProfileTab: React.FC<{ fallbackName: string; fallbackId: string }> = ({ fallbackName, fallbackId }) => {
+  const [profile, setProfile] = useState<GuardProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await apiFetch<GuardProfile>('/api/v1/security/guard/profile', { suppressErrorToast: true });
+        if (!cancelled) setProfile(data);
+      } catch {
+        if (!cancelled) setError('Không tải được hồ sơ ca trực. Vui lòng đăng nhập lại hoặc thử lại sau.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) return <SCMDSuspense message="Đang tải hồ sơ ca trực..." />;
+
+  if (error) {
+    return (
+      <div className="p-5">
+        <div className="min-h-12 rounded-scmd-md border border-red-500/30 bg-red-500/10 p-4 text-sm font-bold text-red-100">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  const guard = profile?.guard;
+  const todayShift = profile?.todayShift;
+
+  return (
+    <motion.div
+      key="profile"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="space-y-4 p-5 pb-8"
+    >
+      {profile?.warnings?.length ? (
+        <div className="rounded-scmd-md border border-amber-400/30 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">
+          <div className="flex min-h-12 items-center gap-3">
+            <AlertTriangle size={20} className="shrink-0" />
+            <span>{profile.warnings.join(' ')}</span>
+          </div>
+        </div>
+      ) : null}
+
+      <section className="rounded-scmd-md border border-white/10 bg-white/[0.04] p-4">
+        <div className="flex min-h-12 items-center gap-3">
+          <User className="text-scmd-primary" size={22} />
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-scmd-silver/50">Bảo vệ trực ca</p>
+            <h2 className="text-xl font-black text-white">{guard?.fullName || fallbackName}</h2>
+            <p className="text-sm font-bold text-scmd-silver/70">ID: {guard?.staffId || fallbackId}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-3">
+        <div className="rounded-scmd-md border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex min-h-12 items-center gap-3">
+            <Building2 className="text-scmd-primary" size={20} />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-scmd-silver/50">Vendor</p>
+              <p className="text-sm font-black text-white">{profile?.scope.vendor?.name || 'Chưa gắn vendor'}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-scmd-md border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex min-h-12 items-center gap-3">
+            <MapPin className="text-scmd-primary" size={20} />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-scmd-silver/50">Site / Guard post</p>
+              <p className="text-sm font-black text-white">{profile?.scope.site?.siteName || 'Chưa gắn site'}</p>
+              <p className="text-xs font-bold text-scmd-silver/60">{todayShift?.guardPost?.postName || 'Chưa gắn chốt trực hôm nay'}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-scmd-md border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex min-h-12 items-center gap-3">
+            <ShieldCheck className="text-scmd-primary" size={20} />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-scmd-silver/50">Hợp đồng / SLA</p>
+              <p className="text-sm font-black text-white">
+                {profile?.scope.contract?.contractName || profile?.scope.contract?.contractCode || 'Chưa gắn hợp đồng'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-scmd-md border border-white/10 bg-white/[0.04] p-4">
+        <div className="mb-3 flex min-h-12 items-center gap-3">
+          <CalendarCheck className="text-scmd-primary" size={20} />
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-scmd-silver/50">Ca trực hôm nay</p>
+            <p className="text-sm font-black text-white">
+              {todayShift ? `${todayShift.startTime} - ${todayShift.endTime} · ${todayShift.positionName}` : 'Chưa có ca trực'}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-xs font-black uppercase tracking-widest text-scmd-silver/60">Check-in 7 ngày gần nhất</h3>
+        {(profile?.attendanceHistory || []).length === 0 ? (
+          <div className="rounded-scmd-md border border-white/10 bg-white/[0.04] p-4 text-sm font-bold text-scmd-silver/70">
+            Chưa có dữ liệu check-in trong 7 ngày gần nhất.
+          </div>
+        ) : (
+          profile?.attendanceHistory.map((record) => (
+            <div key={record.id} className="rounded-scmd-md border border-white/10 bg-white/[0.04] p-4">
+              <div className="flex min-h-12 items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-white">{record.type}</p>
+                  <p className="text-xs font-bold text-scmd-silver/60">
+                    {new Date(record.createdAt).toLocaleString('vi-VN')} · {record.shiftSchedule?.guardPost?.postName || 'Không có chốt'}
+                  </p>
+                </div>
+                <span className={cn(
+                  'rounded px-2 py-1 text-[10px] font-black uppercase',
+                  record.isValid ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200',
+                )}>
+                  {record.isValid ? 'Hợp lệ' : 'Cần kiểm tra'}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </section>
+    </motion.div>
+  );
+};
 
 export const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ user: propsUser }) => {
   const { user: authUser, role: authRole } = useAuth();
@@ -42,19 +228,7 @@ export const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ user: prop
             case 'tasks':
               return <GuardTasksModule key="tasks" />;
             case 'profile':
-              return (
-                <motion.div 
-                  key="profile"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className="flex flex-col items-center justify-center h-full text-slate-500 p-8 text-center"
-                >
-                  <User size={64} className="mb-4 opacity-20" />
-                  <h2 className="text-xl font-bold text-slate-400">Hồ sơ nhân viên</h2>
-                  <p className="mt-2 text-sm">Thông tin cá nhân và lịch sử ca làm việc.</p>
-                </motion.div>
-              );
+              return <GuardProfileTab key="profile" fallbackName={displayName} fallbackId={displayId} />;
             default:
               return <PatrolDashboard key="patrol" />;
           }
@@ -128,4 +302,3 @@ export const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ user: prop
     </div>
   );
 };
-

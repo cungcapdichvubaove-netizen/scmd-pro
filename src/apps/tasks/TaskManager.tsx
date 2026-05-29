@@ -23,6 +23,7 @@ import { cn } from '../../lib/utils';
 import { SCMDCard } from '../common/interfaces/components/SCMDCard';
 import { SCMDButton } from '../common/interfaces/components/SCMDButton';
 import { SCMDInput } from '../common/interfaces/components/SCMDInput';
+import { DashboardSpinner, dashboardInputClass, dashboardMetricCardClass, dashboardPanelClass, dashboardTabButtonClass, dashboardToolbarClass } from '../common/interfaces/components/DashboardUI';
 
 interface Task {
   id: string;
@@ -35,7 +36,11 @@ interface Task {
   createdAt: string;
 }
 
-export function TaskManager() {
+interface TaskManagerProps {
+  embedded?: boolean;
+}
+
+export function TaskManager({ embedded = false }: TaskManagerProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,6 +181,16 @@ export function TaskManager() {
     return new Date(task.dueDate) < new Date();
   };
 
+  const taskMetrics = useMemo(() => {
+    const overdue = tasks.filter(isTaskOverdue).length;
+    return [
+      { label: 'Tổng nhiệm vụ', value: tasks.length, helper: 'đang theo dõi', tone: 'text-white' },
+      { label: 'Quá hạn', value: overdue, helper: 'cần xử lý trước', tone: overdue > 0 ? 'text-red-300' : 'text-emerald-300' },
+      { label: 'Đang làm', value: tasks.filter(t => t.status === 'IN_PROGRESS').length, helper: 'đang thực thi', tone: 'text-scmd-primary' },
+      { label: 'Chưa phân công', value: tasks.filter(t => !t.assigneeId).length, helper: 'cần điều phối', tone: 'text-amber-300' },
+    ];
+  }, [tasks]);
+
   const totalPages = Math.ceil(sortedTasks.length / itemsPerPage);
   const pagedTasks = useMemo(() => {
     return sortedTasks.slice((page - 1) * itemsPerPage, page * itemsPerPage);
@@ -187,88 +202,110 @@ export function TaskManager() {
   }, [searchQuery, statusFilter, sortBy, sortOrder]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-scmd-navy/80 p-8 rounded-scmd-xl border border-white/5 backdrop-blur-xl shadow-scmd-deep relative overflow-hidden group">
-        <div className="absolute top-0 left-0 w-1 h-full bg-scmd-primary" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-scmd-primary/10 rounded-scmd-md text-scmd-primary">
-              <ClipboardList size={24} />
+      {!embedded && (
+        <div className="relative flex flex-col items-start justify-between gap-6 overflow-hidden rounded-2xl border border-white/5 bg-scmd-navy/80 p-5 shadow-scmd-deep backdrop-blur-xl sm:p-6 md:flex-row md:items-center">
+          <div className="absolute left-0 top-0 h-full w-1 bg-scmd-primary" />
+          <div className="relative z-10">
+            <div className="mb-2 flex items-center gap-3">
+              <div className="rounded-xl bg-scmd-primary/10 p-2.5 text-scmd-primary">
+                <ClipboardList size={24} />
+              </div>
+              <h1 className="text-2xl font-black uppercase tracking-widest text-white">Trung tâm Giao việc</h1>
             </div>
-            <h1 className="text-2xl font-black text-white tracking-widest uppercase ">Trung tâm Giao việc</h1>
+            <p className="max-w-md text-xs font-bold uppercase tracking-wider text-scmd-silver/60">Quản lý, phân công và giám sát tiến độ thực hiện nhiệm vụ an ninh.</p>
           </div>
-          <p className="text-scmd-silver/60 text-xs font-bold uppercase tracking-wider max-w-md">Quản lý, phân công và giám sát tiến độ thực hiện nhiệm vụ an ninh.</p>
+          <SCMDButton
+            onClick={() => handleOpenModal()}
+            variant="primary"
+            className="h-14 w-full rounded-xl bg-scmd-primary px-8 font-black text-white shadow-scmd-glow transition-all hover:scale-105 sm:w-auto"
+          >
+            <Plus size={20} className="stroke-[3] transition-transform group-hover:rotate-90" />
+            <span className="tracking-[0.1em]">TẠO NHIỆM VỤ MỚI</span>
+          </SCMDButton>
         </div>
-        <SCMDButton 
-          onClick={() => handleOpenModal()} 
-          variant="primary" 
-          className="h-14 px-8 bg-scmd-primary text-white font-black shadow-scmd-glow hover:scale-105 transition-all group rounded-scmd-md"
-        >
-          <Plus size={20} className="stroke-[3] transition-transform group-hover:rotate-90" /> 
-          <span className="tracking-[0.1em]">TẠO NHIỆM VỤ MỚI</span>
-        </SCMDButton>
-      </div>
+      )}
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {taskMetrics.map((metric) => (
+          <div key={metric.label} className={dashboardMetricCardClass}>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-scmd-silver/45">{metric.label}</p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <p className={cn('text-3xl font-black tracking-[-0.04em]', metric.tone)}>{metric.value}</p>
+              <span className="text-right text-[10px] font-bold uppercase tracking-wider text-scmd-silver/38">{metric.helper}</span>
+            </div>
+          </div>
+        ))}
+      </section>
 
       {/* Filters & Search */}
-      <div className="flex flex-col xl:flex-row gap-4">
-        <div className="relative flex-1 group">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-scmd-silver/30 group-focus-within:text-scmd-primary transition-colors" size={18} />
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm nhiệm vụ..."
+      <div className={cn(dashboardToolbarClass, 'flex flex-col gap-4 xl:flex-row xl:items-center')}>
+        <div className="relative min-w-0 flex-1 group">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-scmd-silver/35 group-focus-within:text-scmd-primary transition-colors" size={18} />
+          <input
+            type="text"
+            placeholder="Tìm nhiệm vụ theo tiêu đề, mô tả..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-12 pl-14 pr-6 bg-scmd-navy/40 border border-white/5 rounded-scmd-md text-scmd-silver font-bold focus:outline-none focus:border-scmd-primary/50 transition-all placeholder:text-scmd-silver/20 text-sm"
+            className={cn(dashboardInputClass, 'pl-14')}
           />
         </div>
         
-        <div className="flex flex-wrap md:flex-nowrap gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
           {/* Sorting UI */}
-          <div className="flex bg-scmd-navy/40 p-1 rounded-scmd-md border border-white/5">
+          <div className="flex min-h-[52px] rounded-2xl border border-white/8 bg-scmd-navy/70 p-1">
             <div className="flex items-center px-3 border-r border-white/5">
-              <ArrowUpDown size={14} className="text-scmd-silver/40" />
+              <ArrowUpDown size={14} className="text-scmd-silver/45" />
             </div>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-transparent text-[10px] font-black text-scmd-silver/60 uppercase tracking-widest px-3 focus:outline-none cursor-pointer hover:text-white transition-colors font-mono"
+              className="bg-transparent px-3 text-[10px] font-black uppercase tracking-widest text-scmd-silver/70 transition-colors hover:text-white focus:outline-none cursor-pointer font-mono"
             >
               <option value="createdAt" className="bg-scmd-navy">Ngày tạo</option>
               <option value="dueDate" className="bg-scmd-navy">Thời hạn</option>
               <option value="priority" className="bg-scmd-navy">Ưu tiên</option>
             </select>
             <button
+              type="button"
+              aria-label="Đổi chiều sắp xếp nhiệm vụ"
               onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-              className="p-2 text-scmd-primary hover:bg-white/5 rounded-scmd-sm transition-all"
+              className="min-h-[44px] min-w-[44px] rounded-xl text-scmd-primary transition-all hover:bg-white/7 focus:outline-none focus:ring-2 focus:ring-scmd-primary/30"
             >
               {sortOrder === 'asc' ? <SortAsc size={14} /> : <SortDesc size={14} />}
             </button>
           </div>
 
-          <div className="flex bg-scmd-navy/40 p-1 rounded-scmd-md border border-white/5">
+          <div className="flex min-h-[52px] overflow-x-auto rounded-2xl border border-white/8 bg-scmd-navy/70 p-1">
             {(['ALL', 'PENDING', 'IN_PROGRESS', 'COMPLETED'] as const).map((s) => (
               <button
                 key={s}
+                type="button"
                 onClick={() => setStatusFilter(s)}
-                className={cn(
-                  "px-4 py-2 rounded-scmd-sm text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
-                  statusFilter === s ? "bg-scmd-primary text-white shadow-scmd-glow" : "text-scmd-silver/40 hover:text-scmd-silver/80"
-                )}
+                className={dashboardTabButtonClass(statusFilter === s)}
               >
                 {s === 'ALL' ? 'Tất cả' : s === 'PENDING' ? 'Chờ' : s === 'IN_PROGRESS' ? 'Làm' : 'Xong'}
               </button>
             ))}
           </div>
+
+          {embedded && (
+            <SCMDButton
+              onClick={() => handleOpenModal()}
+              variant="primary"
+              className="h-14 w-full rounded-2xl px-6 font-black sm:w-auto"
+            >
+              <Plus size={20} className="stroke-[3]" />
+              <span className="tracking-[0.1em]">TẠO NHIỆM VỤ</span>
+            </SCMDButton>
+          )}
         </div>
       </div>
 
       {/* Task Grid */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-32 gap-4">
-          <div className="w-10 h-10 border-4 border-scmd-cyber border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(0,242,255,0.3)]" />
-          <p className="text-scmd-silver/40 font-black uppercase tracking-[0.2em] text-xs">Đang tải dữ liệu...</p>
-        </div>
+        <DashboardSpinner message="Đang tải danh sách nhiệm vụ..." />
       ) : (
         <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -282,12 +319,13 @@ export function TaskManager() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3, delay: (idx % itemsPerPage) * 0.05 }}
               >
-                <SCMDCard 
+                <SCMDCard
                   className={cn(
-                    "p-5 h-full flex flex-col border border-white/5 transition-all duration-300 group bg-scmd-navy/80 relative overflow-hidden rounded-3xl",
-                    task.status === 'COMPLETED' ? "opacity-60 grayscale-[0.3]" : 
-                    isTaskOverdue(task) ? "border-scmd-error/30 bg-scmd-error/5 shadow-lg shadow-scmd-error/5" :
-                    "hover:border-scmd-primary/30 hover:bg-scmd-navy hover:shadow-2xl"
+                    dashboardPanelClass,
+                    "p-5 h-full flex flex-col transition-all duration-300 group relative overflow-hidden hover:-translate-y-0.5",
+                    task.status === 'COMPLETED' ? "opacity-70 grayscale-[0.25]" :
+                    isTaskOverdue(task) ? "border-scmd-error/35 bg-scmd-error/8 shadow-lg shadow-scmd-error/10" :
+                    "hover:border-scmd-primary/35"
                   )}
                 >
                   {isTaskOverdue(task) && (
@@ -325,12 +363,12 @@ export function TaskManager() {
                       )}
                     </div>
                     
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal(task)} className="p-1.5 bg-white/5 text-scmd-silver/40 hover:text-white rounded-scmd-sm transition-all border border-white/5">
-                        <Edit2 size={12} />
+                    <div className="flex gap-2">
+                      <button type="button" aria-label="Sửa nhiệm vụ" onClick={() => handleOpenModal(task)} className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/5 text-scmd-silver/55 transition-all hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-scmd-primary/30">
+                        <Edit2 size={14} />
                       </button>
-                      <button onClick={() => handleDelete(task.id, task.title)} className="p-1.5 bg-scmd-error/10 text-scmd-error hover:bg-scmd-error hover:text-white rounded-scmd-sm transition-all border border-scmd-error/10">
-                        <Trash2 size={12} />
+                      <button type="button" aria-label="Xoá nhiệm vụ" onClick={() => handleDelete(task.id, task.title)} className="flex h-11 w-11 items-center justify-center rounded-2xl border border-scmd-error/15 bg-scmd-error/10 text-scmd-error transition-all hover:bg-scmd-error hover:text-white focus:outline-none focus:ring-2 focus:ring-scmd-error/30">
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>

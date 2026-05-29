@@ -1,10 +1,59 @@
-// Kill-switch SW: thay thế SW cũ, xóa cache, không intercept bất kỳ fetch nào
-self.addEventListener('install', () => self.skipWaiting());
+const CACHE_VERSION = 'scmd-guard-shell-v1';
+const APP_SHELL_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.webmanifest',
+  '/logo_scmd_pro.png',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION)
+      .then((cache) => cache.addAll(APP_SHELL_ASSETS))
+      .then(() => self.skipWaiting())
+  );
+});
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key !== CACHE_VERSION)
+          .map((key) => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
-// Không có fetch handler → mọi request đi thẳng tới network
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const url = new URL(request.url);
+
+  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_VERSION).then((cache) => cache.put('/index.html', copy));
+          return response;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+      if (response.ok && ['script', 'style', 'image', 'font'].includes(request.destination)) {
+        const copy = response.clone();
+        caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
+      }
+      return response;
+    }))
+  );
+});

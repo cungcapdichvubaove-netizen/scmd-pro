@@ -18,6 +18,8 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { cn } from '../../../../lib/utils';
+import { EmptyState } from '../../../superadmin/interfaces/components/EmptyState';
+import { DashboardPageHeader, dashboardInputClass, dashboardMetricCardClass, dashboardPanelClass, dashboardTabButtonClass, dashboardToolbarClass } from '../../../common/interfaces/components/DashboardUI';
 
 interface Attachment {
   id: string;
@@ -66,7 +68,7 @@ export const FileManager: React.FC = () => {
       if (search) url += `&search=${encodeURIComponent(search)}`;
       
       const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('scmd_jwt')}` }
+        credentials: 'include'
       });
       const data = await res.json();
       setAttachments(data.items || []);
@@ -93,9 +95,11 @@ export const FileManager: React.FC = () => {
       formData.append('category', uploadCategory);
       formData.append('tags', JSON.stringify(uploadTags.split(',').map(t => t.trim()).filter(Boolean)));
 
+      const csrfToken = document.cookie.split('; ').find((row) => row.startsWith('scmd_csrf='))?.split('=').slice(1).join('=');
       const res = await fetch('/api/v1/tenant/attachments', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('scmd_jwt')}` },
+        credentials: 'include',
+        headers: csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {},
         body: formData
       });
 
@@ -117,9 +121,11 @@ export const FileManager: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     try {
+      const csrfToken = document.cookie.split('; ').find((row) => row.startsWith('scmd_csrf='))?.split('=').slice(1).join('=');
       const res = await fetch(`/api/v1/tenant/attachments/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('scmd_jwt')}` }
+        credentials: 'include',
+        headers: csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {}
       });
       if (res.ok) {
         fetchAttachments();
@@ -191,7 +197,13 @@ export const FileManager: React.FC = () => {
             {isImage ? (
               <img src={previewFile.url} alt={previewFile.name} className="max-w-full max-h-full object-contain shadow-2xl" />
             ) : isPDF ? (
-              <iframe src={previewFile.url} className="w-full h-full border-none rounded-xl" title="PDF Preview" />
+              <iframe
+                src={previewFile.url}
+                className="w-full h-full border-none rounded-xl"
+                title="PDF Preview"
+                sandbox="allow-downloads allow-forms allow-popups"
+                referrerPolicy="no-referrer"
+              />
             ) : (
               <div className="text-center space-y-4 pt-10">
                 <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center text-scmd-silver/20 mx-auto">
@@ -255,67 +267,81 @@ export const FileManager: React.FC = () => {
     );
   };
 
+  const archiveMetrics = [
+    { label: 'Tổng tệp', value: attachments.length, helper: 'bằng chứng/tài liệu' },
+    { label: 'SLA', value: attachments.filter(file => file.category === 'SLA').length, helper: 'đối soát hợp đồng' },
+    { label: 'Incident', value: attachments.filter(file => file.category === 'INCIDENT' || file.category === 'EVIDENCE').length, helper: 'sự cố & evidence' },
+  ];
+
   return (
-    <div className="space-y-8 pb-32">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white uppercase tracking-tighter">
-            Quản lý <span className="text-scmd-primary">Tệp tin</span>
-          </h2>
-          <p className="text-scmd-silver/40 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
-            H lưu trữ bằng chứng & tài liệu vận hành • {attachments.length} TỆP
-          </p>
-        </div>
+    <div className="space-y-6 pb-24">
+      <DashboardPageHeader
+        title={<>Quản lý <span className="text-scmd-primary">Tệp tin</span></>}
+        description={`Kho bằng chứng, tài liệu SLA và hồ sơ nghiệm thu vận hành • ${attachments.length} tệp`}
+        eyebrow="Evidence archive"
+        actions={(
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <div className={cn(dashboardToolbarClass, 'flex overflow-x-auto p-1')}>
+              <button
+                onClick={() => toggleSort('createdAt')}
+                className={cn(
+                  'flex shrink-0 items-center gap-2',
+                  dashboardTabButtonClass(sortBy === 'createdAt')
+                )}
+              >
+                <Calendar size={12} /> NGÀY {sortBy === 'createdAt' && (sortOrder === 'desc' ? <SortDesc size={12} /> : <SortAsc size={12} />)}
+              </button>
+              <button
+                onClick={() => toggleSort('name')}
+                className={cn(
+                  'flex shrink-0 items-center gap-2',
+                  dashboardTabButtonClass(sortBy === 'name')
+                )}
+              >
+                <ArrowUpDown size={12} /> TÊN {sortBy === 'name' && (sortOrder === 'desc' ? <SortDesc size={12} /> : <SortAsc size={12} />)}
+              </button>
+              <button
+                onClick={() => toggleSort('size')}
+                className={cn(
+                  'flex shrink-0 items-center gap-2',
+                  dashboardTabButtonClass(sortBy === 'size')
+                )}
+              >
+                <Layers size={12} /> SIZE {sortBy === 'size' && (sortOrder === 'desc' ? <SortDesc size={12} /> : <SortAsc size={12} />)}
+              </button>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex bg-scmd-navy/50 p-1 rounded-2xl border border-white/5">
-            <button 
-              onClick={() => toggleSort('createdAt')}
-              className={cn(
-                "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all",
-                sortBy === 'createdAt' ? "bg-scmd-primary text-white shadow-lg shadow-scmd-primary/20" : "text-scmd-silver/40 hover:text-white"
-              )}
-            >
-              <Calendar size={12} /> NGÀY {sortBy === 'createdAt' && (sortOrder === 'desc' ? <SortDesc size={12} /> : <SortAsc size={12} />)}
-            </button>
-            <button 
-              onClick={() => toggleSort('name')}
-              className={cn(
-                "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all",
-                sortBy === 'name' ? "bg-scmd-primary text-white shadow-lg shadow-scmd-primary/20" : "text-scmd-silver/40 hover:text-white"
-              )}
-            >
-              <ArrowUpDown size={12} /> TÊN {sortBy === 'name' && (sortOrder === 'desc' ? <SortDesc size={12} /> : <SortAsc size={12} />)}
-            </button>
-            <button 
-              onClick={() => toggleSort('size')}
-              className={cn(
-                "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all",
-                sortBy === 'size' ? "bg-scmd-primary text-white shadow-lg shadow-scmd-primary/20" : "text-scmd-silver/40 hover:text-white"
-              )}
-            >
-              <Layers size={12} /> SIZE {sortBy === 'size' && (sortOrder === 'desc' ? <SortDesc size={12} /> : <SortAsc size={12} />)}
-            </button>
+            <div className="relative min-w-0 group sm:w-64">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-scmd-silver/30 group-focus-within:text-scmd-primary transition-colors" size={16} />
+              <input
+                type="text"
+                placeholder="TÌM KIẾM TỆP..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className={cn(dashboardInputClass, 'pl-12 text-xs uppercase tracking-[0.14em]')}
+              />
+            </div>
           </div>
+        )}
+      />
 
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-scmd-silver/30 group-focus-within:text-scmd-primary transition-colors" size={16} />
-            <input 
-              type="text" 
-              placeholder="TÌM KIẾM TỆP..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-12 pr-6 py-4 bg-scmd-navy/50 border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white focus:outline-none focus:border-scmd-primary/50 transition-all w-64"
-            />
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {archiveMetrics.map((metric) => (
+          <div key={metric.label} className={dashboardMetricCardClass}>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-scmd-silver/45">{metric.label}</p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <p className="text-3xl font-black tracking-[-0.04em] text-white">{metric.value}</p>
+              <span className="text-right text-[10px] font-bold uppercase tracking-wider text-scmd-silver/38">{metric.helper}</span>
+            </div>
           </div>
-        </div>
-      </div>
+        ))}
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {/* Sidebar Filters */}
         <div className="space-y-6">
-          <div className="bg-scmd-navy/30 rounded-3xl p-6 border border-white/5">
-            <p className="text-[9px] font-black text-scmd-silver/30 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+          <div className={cn(dashboardPanelClass, 'p-5 lg:sticky lg:top-6')}>
+            <p className="text-[10px] font-black text-scmd-silver/45 uppercase tracking-[0.22em] mb-4 flex items-center gap-2">
               <Folder size={12} /> Danh mục
             </p>
             <div className="space-y-1">
@@ -345,7 +371,7 @@ export const FileManager: React.FC = () => {
             </div>
           </div>
 
-          <form onSubmit={handleUpload} className="bg-scmd-primary/5 rounded-3xl p-6 border border-scmd-primary/10 space-y-4">
+          <form onSubmit={handleUpload} className={cn(dashboardPanelClass, 'space-y-4 border-scmd-primary/20 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.18),transparent_55%)] p-5')}>
             <p className="text-[9px] font-black text-scmd-primary uppercase tracking-[0.2em] flex items-center gap-2">
               <Upload size={12} /> Tải tệp mới
             </p>
@@ -359,7 +385,7 @@ export const FileManager: React.FC = () => {
               />
               <label 
                 htmlFor="file-upload"
-                className="w-full flex flex-col items-center gap-3 p-6 border-2 border-dashed border-scmd-primary/20 rounded-2xl hover:border-scmd-primary/40 cursor-pointer transition-all bg-white/5"
+                className="w-full flex flex-col items-center gap-3 p-7 border-2 border-dashed border-scmd-primary/25 rounded-[24px] hover:border-scmd-primary/55 cursor-pointer transition-all bg-scmd-navy/55 hover:bg-scmd-primary/8"
               >
                 <div className="w-10 h-10 rounded-full bg-scmd-primary/10 flex items-center justify-center text-scmd-primary">
                   <Plus size={20} />
@@ -416,12 +442,12 @@ export const FileManager: React.FC = () => {
               ))}
             </div>
           ) : attachments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-32 bg-scmd-navy/20 rounded-3xl border border-dashed border-white/5">
-              <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center text-scmd-silver/20 mb-6 font-thin">
-                <File size={32} />
-              </div>
-              <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">Không có tệp tin nào được tìm thấy</p>
-            </div>
+            <EmptyState
+              icon={<File size={32} />}
+              title="Không có tệp tin nào được tìm thấy"
+              description="Tải lên bằng chứng, tài liệu SLA hoặc hồ sơ nghiệm thu để lưu vết vận hành."
+              className="py-24"
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               <AnimatePresence mode="popLayout">
@@ -432,30 +458,32 @@ export const FileManager: React.FC = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     key={file.id}
-                    className="bg-scmd-navy/30 rounded-3xl p-6 border border-white/5 group hover:border-scmd-primary/30 transition-all relative overflow-hidden"
+                    className={cn(dashboardPanelClass, 'group relative flex min-h-[220px] flex-col overflow-hidden p-5 transition-all hover:-translate-y-0.5 hover:border-scmd-primary/35')}
                   >
                     <div className="flex items-start justify-between mb-6">
                       <div className="w-12 h-12 rounded-2xl bg-scmd-primary/10 flex items-center justify-center text-scmd-primary">
                         <File size={24} />
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex gap-2">
                         <button 
                           onClick={() => setPreviewFile(file)}
-                          className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-scmd-silver/60 hover:bg-scmd-primary hover:text-white transition-all shadow-sm"
+                          aria-label="Xem trước tệp"
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5 text-scmd-silver/70 hover:bg-scmd-primary hover:text-white transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-scmd-primary/30"
                         >
                           <Eye size={14} />
                         </button>
                         <button 
                           onClick={() => setDeleteConfirm(file)}
-                          className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-scmd-silver/60 hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                          aria-label="Xoá tệp"
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/30"
                         >
                           <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
 
-                    <div className="space-y-1 mb-6">
-                      <p className="text-[11px] font-black text-white uppercase tracking-tight line-clamp-1 group-hover:text-scmd-primary transition-colors cursor-pointer" onClick={() => setPreviewFile(file)}>
+                    <div className="space-y-2 mb-6">
+                      <p className="text-sm font-black text-white uppercase tracking-tight line-clamp-2 group-hover:text-scmd-primary transition-colors cursor-pointer" onClick={() => setPreviewFile(file)}>
                         {file.name}
                       </p>
                       <p className="text-[9px] text-scmd-silver/40 uppercase font-bold tracking-widest">

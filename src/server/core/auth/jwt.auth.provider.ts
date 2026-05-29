@@ -4,6 +4,48 @@ import { redisClient } from '../redis.js';
 import { db } from '../db/prisma.js';
 import { logger } from '../logger/index.js';
 import { JWT_SECRET } from './secrets.js';
+import { UserRole } from '../architecture/types.js';
+
+const SYSTEM_TENANT_IDS = new Set(['SYSTEM', 'PLATFORM', 'tenant_system']);
+
+type TokenVersionRecord = {
+  tokenVersion: number;
+};
+
+function isAuthUserClaims(value: unknown): value is AuthUser {
+  if (!value || typeof value !== 'object') return false;
+  const claims = value as Partial<AuthUser>;
+  return typeof claims.id === 'string'
+    && typeof claims.username === 'string'
+    && typeof claims.role === 'string'
+    && Object.values(UserRole).includes(claims.role as UserRole)
+    && typeof claims.tenantId === 'string'
+    && typeof claims.name === 'string'
+    && typeof claims.tokenVersion === 'number'
+    && Array.isArray(claims.permissions);
+}
+
+async function findTokenVersionRecord(decoded: AuthUser): Promise<TokenVersionRecord | null> {
+  const isSystemLevel = !decoded.tenantId ||
+    SYSTEM_TENANT_IDS.has(decoded.tenantId) ||
+    decoded.role === UserRole.SUPER_ADMIN;
+
+  if (isSystemLevel) {
+    return await db.withTenant('SYSTEM', async (tx) => {
+      return await tx.staff.findUnique({
+        where: { id: decoded.id },
+        select: { tokenVersion: true },
+      });
+    });
+  }
+
+  return await db.withTenant(decoded.tenantId, async (tx) => {
+    return await tx.staff.findUnique({
+      where: { id: decoded.id },
+      select: { tokenVersion: true }
+    });
+  });
+}
 
 export class JwtAuthProvider implements AuthProvider {
   private secret: string = JWT_SECRET;
@@ -12,7 +54,12 @@ export class JwtAuthProvider implements AuthProvider {
 
   async verifyToken(token: string): Promise<AuthUser | null> {
     try {
-      const decoded = jwt.verify(token, this.secret) as AuthUser;
+      const rawDecoded = jwt.verify(token, this.secret);
+      if (!isAuthUserClaims(rawDecoded)) {
+        logger.warn('SECURITY_ALERT: Invalid JWT claims shape detected');
+        return null;
+      }
+      const decoded = rawDecoded;
       
       // OPTIMIZATION: Check token version for instant revocation
       const cacheKey = `user_token_version:${decoded.id}`;
@@ -26,38 +73,19 @@ export class JwtAuthProvider implements AuthProvider {
         // → verifyToken trả null → mọi request sau login của super-admin đều fail 401.
         //
         // Giải pháp: phân biệt 3 trường hợp:
-        //   (a) super-admin / system tenant → dùng db.systemBypass() (bypass RLS hoàn toàn, có audit)
-        //   (b) tenant user bình thường      → dùng db.withTenant() trong transaction (set RLS đúng)
-        //   (c) không có tenantId            → dùng db.system() (Prisma-level guard, không set RLS)
+        //   (a) super-admin / system tenant → db.withTenant('SYSTEM') — set RLS session var + AsyncLocalStorage bypass tự động
+        //   (b) tenant user bình thường      → db.withTenant(tenantId) — set RLS session var đúng
+        //   (c) không có tenantId            → db.system() — Prisma-level guard, không set RLS
         //
         // db.forTenant() chỉ inject `where.tenantId` ở Prisma layer nhưng KHÔNG set PostgreSQL
-        // session variable → không đủ để pass RLS. Đây là bug kiến trúc cần fix triệt để.
+        // session variable → không đủ để pass RLS.
 
-        const SYSTEM_TENANT_IDS = new Set(['SYSTEM', 'PLATFORM', 'tenant_system']);
-        const isSystemLevel = !decoded.tenantId ||
-          SYSTEM_TENANT_IDS.has(decoded.tenantId) ||
-          decoded.role === 'super-admin';
-
-        let staff: { tokenVersion: number } | null = null;
+        let staff: TokenVersionRecord | null = null;
 
         try {
-          if (isSystemLevel) {
-            // System/super-admin: bypass RLS, truy vấn trực tiếp cross-tenant
-            staff = await db.systemBypass().staff.findUnique({
-              where: { id: decoded.id },
-              select: { tokenVersion: true }
-            });
-          } else {
-            // Tenant user: cần set RLS context đúng qua withTenant transaction
-            await db.withTenant(decoded.tenantId, async (tx) => {
-              staff = await tx.staff.findUnique({
-                where: { id: decoded.id },
-                select: { tokenVersion: true }
-              });
-            });
-          }
-        } catch (dbErr) {
-          logger.warn({ err: (dbErr as any)?.message, userId: decoded.id }, '[verifyToken] DB lookup failed, denying token');
+          staff = await findTokenVersionRecord(decoded);
+        } catch (dbErr: unknown) {
+          logger.warn({ err: dbErr instanceof Error ? dbErr.message : dbErr, userId: decoded.id }, '[verifyToken] DB lookup failed, denying token');
           return null;
         }
         
@@ -82,7 +110,7 @@ export class JwtAuthProvider implements AuthProvider {
     }
   }
 
-  async createToken(user: AuthUser, expiresIn: string = '1h'): Promise<string> {
-    return jwt.sign(user, this.secret, { expiresIn: expiresIn as any });
+  async createToken(user: AuthUser, expiresIn: string = '15m'): Promise<string> {
+    return jwt.sign(user, this.secret, { expiresIn: expiresIn as `${number}${'s' | 'm' | 'h' | 'd'}` });
   }
 }

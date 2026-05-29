@@ -1,34 +1,37 @@
 /**
  * Authentication Utilities for SCMD Pro
- * Triết lý Think Zero: Giữ logic xác thực tập trung và an toàn.
+ * Triết lý Zero Trust: credential nhạy cảm nằm trong httpOnly cookie; frontend chỉ giữ metadata không nhạy cảm.
  */
 
-export const getAuthHeaders = (extraHeaders: Record<string, string> = {}) => {
-  const token = localStorage.getItem('scmd_jwt');
-  const tenantId = localStorage.getItem('scmd_tenant_id');
+const getCookieValue = (name: string) => {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null;
+};
 
+export const getAuthHeaders = (extraHeaders: Record<string, string> = {}) => {
+  const tenantId = localStorage.getItem('scmd_tenant_id');
+  const csrfToken = getCookieValue('scmd_csrf');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...extraHeaders
   };
-  
-  // Chỉ thêm header Authorization nếu token hợp lệ và không phải là chuỗi "null"/"undefined"
-  if (token && token !== 'null' && token !== 'undefined') {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
-  // Inject tenant context toàn hệ thống
-  if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
-    headers['x-tenant-id'] = tenantId;
-  }
-  
+  if (tenantId) headers['x-tenant-id'] = tenantId;
+  if (csrfToken) headers['x-csrf-token'] = csrfToken;
+
+  delete headers.Authorization;
+  delete headers.authorization;
+
   return headers;
 };
 
-export const setAuthToken = (token: string) => {
-  if (token) {
-    localStorage.setItem('scmd_jwt', token);
-  }
+export const setAuthToken = (_token?: string | null) => {
+  // Deprecated: không persist JWT vào localStorage. Server phát hành httpOnly cookie sau login.
+  localStorage.removeItem('scmd_jwt');
+  localStorage.removeItem('scmd_refresh_token');
 };
 
 export const removeAuthToken = () => {
@@ -37,7 +40,6 @@ export const removeAuthToken = () => {
 };
 
 export const isAuthenticated = () => {
-  const token = localStorage.getItem('scmd_jwt');
   const role = localStorage.getItem('scmd_user_role');
-  return !!(token && token !== 'null' && token !== 'undefined' && role);
+  return !!role;
 };

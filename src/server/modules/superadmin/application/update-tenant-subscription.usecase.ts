@@ -37,8 +37,12 @@ export class UpdateTenantSubscriptionUseCase extends BaseUseCase<UpdateTenantSub
       }
     });
 
-    // Invalidate tenant status cache immediately
-    await cache.del(`tenant:status:${tenantId}`);
+    // Invalidate tenant cache/feature cache immediately because plan defaults affect feature resolution
+    await Promise.all([
+      cache.del(`tenant:status:${tenantId}`),
+      cache.del(`tenant:${tenantId}`),
+      cache.del(`tenant:features:${tenantId}`),
+    ]);
 
     await AuditService.log({
       userId: context.userId,

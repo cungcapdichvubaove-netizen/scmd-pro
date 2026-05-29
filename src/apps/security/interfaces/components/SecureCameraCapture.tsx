@@ -64,8 +64,12 @@ export const SecureCameraCapture: React.FC<SecureCameraCaptureProps> = ({
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // V.5.6.2.0: Optimization - Resize to max 1920px width for storage efficiency
+    const MAX_WIDTH = 1920;
+    const scale = video.videoWidth > MAX_WIDTH ? MAX_WIDTH / video.videoWidth : 1;
+    
+    canvas.width = video.videoWidth * scale;
+    canvas.height = video.videoHeight * scale;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -94,13 +98,14 @@ export const SecureCameraCapture: React.FC<SecureCameraCaptureProps> = ({
     ctx.font = 'bold 22px "Inter", sans-serif';
     ctx.fillText('LIVE CAPTURE', canvas.width - 20, canvas.height - 35);
     
+    // V.5.6.2.0: Compression at 0.8 quality
     canvas.toBlob((blob) => {
       if (blob) {
         setPhotoBlob(blob);
         const url = URL.createObjectURL(blob);
         setPhotoDataUrl(url);
       }
-    }, 'image/jpeg', 0.85);
+    }, 'image/jpeg', 0.8);
   };
 
   const retakePhoto = () => {
@@ -119,9 +124,11 @@ export const SecureCameraCapture: React.FC<SecureCameraCaptureProps> = ({
       formData.append('category', category);
       formData.append('tags', JSON.stringify(tags));
 
+      const csrfToken = document.cookie.split('; ').find((row) => row.startsWith('scmd_csrf='))?.split('=').slice(1).join('=');
       const res = await fetch('/api/v1/tenant/attachments', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('scmd_jwt')}` },
+        credentials: 'include',
+        headers: csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {},
         body: formData
       });
       

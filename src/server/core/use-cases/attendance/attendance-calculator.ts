@@ -1,4 +1,5 @@
 import { db } from '../../db/prisma.js';
+import { shiftLocalDateTimeToUtc } from '../../time/tenant-time.js';
 
 export interface AttendanceMetrics {
   workedMinutes: number;
@@ -27,15 +28,12 @@ export class AttendanceCalculator {
 
       if (shift) {
         // e.g., shift.endTime is "17:00", shift.date is "2024-05-20"
-        const [year, month, day] = shift.date.split('-').map(Number);
-        const [hours, minutes] = shift.endTime.split(':').map(Number);
-        
-        // Construct shift end date object
-        const shiftEnd = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        const shiftEnd = shiftLocalDateTimeToUtc(shift.date, shift.endTime);
         
         // Handle night shifts
         const [startHours] = shift.startTime.split(':').map(Number);
-        if (hours < startHours) {
+        const [endHours] = shift.endTime.split(':').map(Number);
+        if (endHours < startHours) {
           shiftEnd.setDate(shiftEnd.getDate() + 1);
         }
         

@@ -11,6 +11,7 @@ import { SCMDTooltip } from '../../common/interfaces/components/SCMDTooltip';
 import { useModalStore } from '../store/useModalStore';
 import { useDashboardStore } from '../store/useDashboardStore';
 import { useShallow } from 'zustand/react/shallow';
+import { htmlEscape, printHtmlFragment, formatVietnamDateTime } from './utils/reportExport';
 
 interface DashboardModalsProps {
   handleDeleteCheckpoint: (id: string, cb: any) => void;
@@ -65,6 +66,30 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
     exit: { opacity: 0 }
   };
 
+  const handlePrintCheckpointQR = () => {
+    if (!showQRModal) return;
+    const qrMarkup = document.getElementById('checkpoint-qr-print-source')?.innerHTML || '';
+    const checkpointName = showQRModal.name || 'Điểm tuần tra';
+    const qrValue = showQRModal.qr_hash || showQRModal.id || '';
+
+    printHtmlFragment(
+      `Phiếu QR - ${checkpointName}`,
+      `
+        <div class="center">
+          <img class="logo" src="/logo_scmd_pro.png" alt="SCMD Pro" />
+          <h1>Phiếu mã QR điểm tuần tra</h1>
+          <div class="meta">${htmlEscape(tenantInfo?.name || 'SCMD Pro')} · Lập lúc ${htmlEscape(formatVietnamDateTime())}</div>
+        </div>
+        <div class="box center">
+          <h2>${htmlEscape(checkpointName)}</h2>
+          <div style="display:inline-flex;padding:18px;border:1px solid #e2e8f0;border-radius:18px;margin:16px auto;background:#fff">${qrMarkup}</div>
+          <div class="meta"><strong>Mã định danh:</strong> ${htmlEscape(qrValue)}</div>
+        </div>
+        <div class="footer">Chỉ sử dụng mã QR này cho điểm tuần tra tương ứng. Không chia sẻ ra ngoài phạm vi vận hành.</div>
+      `,
+    );
+  };
+
   return (
     <>
       {/* ── SOS Overlay ─────────────────────────────────────────────────────── */}
@@ -92,7 +117,7 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
                   className="absolute inset-0 bg-[radial-gradient(circle,rgba(255,255,255,0.2)_0%,transparent_70%)]"
                 />
                 <AlertTriangle size={84} className="mx-auto mb-6 relative z-10 drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]" />
-                <h2 className="text-5xl font-black uppercase tracking-tighter relative z-10 italic">EMERGENCY SOS</h2>
+                <h2 className="text-5xl font-black uppercase tracking-tighter relative z-10 not-italic">EMERGENCY SOS</h2>
                 <p className="text-red-100 font-bold mt-3 tracking-[0.3em] uppercase text-xs relative z-10">Phản ứng khẩn cấp cấp độ 1</p>
               </div>
               <div className="p-10 space-y-8 bg-scmd-surface/50">
@@ -118,7 +143,7 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
                   <p className="text-[10px] font-black text-red-400/60 uppercase tracking-widest mb-3 ml-2">
                     Báo cáo hiện trường
                   </p>
-                  <p className="text-lg font-bold text-red-100 italic leading-snug ml-2">"{activeSOS.message}"</p>
+                  <p className="text-lg font-bold text-red-100 not-italic leading-snug ml-2">"{activeSOS.message}"</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pt-4">
@@ -586,10 +611,10 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
                               className="w-16 h-16 rounded-xl object-cover border-2 border-slate-100"
                               referrerPolicy="no-referrer"
                               onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = "https://images.unsplash.com/photo-1590247813693-5541d1c609fd?q=80&w=200&h=200&auto=format&fit=crop";
-                                target.onerror = null;
-                              }}
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.onerror = null;
+                            }}
                             />
                           )}
                           {item.type === 'text' && (
@@ -640,7 +665,7 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">
                 Mã QR bảo mật
               </p>
-              <div className="flex justify-center mb-8 p-4 bg-slate-50 rounded-3xl inline-block">
+              <div id="checkpoint-qr-print-source" className="flex justify-center mb-8 p-4 bg-slate-50 rounded-3xl inline-block">
                 <QRCodeSVG
                   value={showQRModal.qr_hash || showQRModal.id}
                   size={200}
@@ -652,7 +677,7 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => window.print()}
+                  onClick={handlePrintCheckpointQR}
                   className="flex-1 h-14 bg-slate-900 text-white font-black rounded-2xl flex items-center justify-center gap-2"
                 >
                   <Printer size={16} /> In QR

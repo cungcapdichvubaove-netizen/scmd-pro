@@ -25,6 +25,7 @@ interface BillingStore {
   setTenants:       (tenants: TenantBillingSummary[]) => void
   selectTenant:     (tenant: TenantBillingSummary | null) => void
   setActivating:    (v: boolean) => void
+  setLoading:       (v: boolean) => void
   setFilter:        (f: BillingStore['filter']) => void
 }
 
@@ -38,5 +39,6 @@ export const useBillingStore = create<BillingStore>((set) => ({
   setTenants:    (tenants)       => set({ tenants }),
   selectTenant:  (selectedTenant) => set({ selectedTenant }),
   setActivating: (isActivating)  => set({ isActivating }),
+  setLoading:    (isLoading)     => set({ isLoading }),
   setFilter:     (filter)        => set({ filter }),
 }))

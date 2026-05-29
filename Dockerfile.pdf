@@ -1,27 +1,43 @@
-# [FIX H-03] Pin version thay vì :latest để build stable trong production
-FROM ghcr.io/puppeteer/puppeteer:22.15.0
+# [FIX NET-02]: node:20-alpine + apk install chromium
+# Vấn đề: ghcr.io bị EOF (Azure Blob bị chặn), apt bị lỗi NOSPLIT (proxy intercept HTTP).
+# Giải pháp: Alpine dùng apk qua dl-cdn.alpinelinux.org (HTTPS, ít bị proxy chặn hơn).
+# Binary path: /usr/bin/chromium-browser — khớp chính xác với PUPPETEER_EXECUTABLE_PATH trong .env.
+FROM node:20-alpine
 
 USER root
 WORKDIR /app
 
-# Khai báo môi trường để skip download chromium vì image đã có sẵn
+# Cài Chromium + dependencies cần thiết qua apk (Alpine Package Keeper)
+# chromium: trình duyệt headless, udev: device events, ttf-freefont: font cơ bản
+# wget: cần cho healthcheck (wget -qO- http://localhost:3001/health)
+RUN apk add --no-cache \
+    chromium \
+    udev \
+    ttf-freefont \
+    wget
+
+# PUPPETEER_EXECUTABLE_PATH không set ở đây vì .env đã có:
+#   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Alpine chromium binary nằm đúng tại /usr/bin/chromium-browser → khớp .env
 ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
-# [FIX H-03] Chỉ install production dependencies, KHÔNG cài devDependencies
-# pdf-server.js là plain JavaScript — không cần build TypeScript
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --ignore-scripts
+# [FIX PERF]: Chỉ copy package.json của PDF service (2 deps: express + puppeteer)
+COPY scripts/package.json ./
+RUN npm install --ignore-scripts
 
-# Chỉ copy file cần thiết — KHÔNG copy src/ hay tsconfig* (không cần build)
+# Chỉ copy file cần thiết
 COPY scripts/pdf-server.js ./scripts/
-
-# [FIX H-03] Không cần RUN npm run build:backend — pdf-server.js là plain JS
 
 ENV PORT=3001
 EXPOSE 3001
 
-# Chạy non-root theo best practice của base image puppeteer
+# Tạo user non-root pptruser (tương đương base image cũ)
+RUN addgroup -S pptruser && adduser -S -G pptruser pptruser \
+  && mkdir -p /home/pptruser/Downloads \
+  && chown -R pptruser:pptruser /home/pptruser \
+  && chown -R pptruser:pptruser /app
+
 USER pptruser
 
 CMD ["node", "scripts/pdf-server.js"]

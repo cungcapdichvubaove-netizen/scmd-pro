@@ -8,15 +8,16 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { role, token, isLoading } = useAuth();
+  const { role, isLoading } = useAuth();
   const location = useLocation();
+  const isAuthenticated = Boolean(role);
 
   // FIX [BUG-6a]: Xóa console.log debug không có điều kiện — lộ role/token ra DevTools production.
   if (process.env.NODE_ENV !== 'production') {
     console.log('[ProtectedRoute Debug]', {
       path: location.pathname,
       isLoading,
-      hasToken: !!token,
+      isAuthenticated,
       role,
       allowedRoles,
     });
@@ -29,12 +30,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     return (
       <div className="h-screen w-full flex flex-col justify-center items-center bg-slate-950">
         <div className="w-12 h-12 border-4 border-scmd-cyber border-t-transparent rounded-full animate-spin mb-4"></div>
-        <div className="text-scmd-cyber font-mono animate-pulse">Verifying Session Security...</div>
+        <div className="text-scmd-cyber font-mono animate-pulse">Đang xác thực phiên đăng nhập...</div>
       </div>
     );
   }
 
-  if (!token) {
+  if (!isAuthenticated) {
     // Redirect to login, preserve current location de sau login quay lai dung trang
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
@@ -44,6 +45,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     if (role === 'super-admin') return <Navigate to="/super-admin/dashboard" replace />;
     if (role === 'tenant-admin') return <Navigate to="/admin/dashboard" replace />;
     if (role === 'guard') return <Navigate to="/guard/app" replace />;
+    if (role === 'vendor-commander') return <Navigate to="/vendor-commander/workspace" replace />;
 
     // FIX [BUG-6b]: Fallback truoc la Navigate to="/" (landing page) -- gay nham lan khi
     // role=null do race condition, user thay trang chu thay vi man hinh login.

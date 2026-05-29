@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   ShieldAlert, User, CheckCircle2, Grid, List,
   Search, ArrowRight, Camera, 
-  Loader2, Target, MapPin, 
+  Target, MapPin,
   MessageSquare, UserPlus, ShieldCheck, Activity,
-  Filter, Calendar, ChevronDown
+  Filter, Calendar, ChevronDown, Clock, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiFetch } from '../../../../lib/api';
@@ -12,15 +13,29 @@ import { cn } from '../../../../lib/utils';
 import { SCMDButton } from '../../../common/interfaces/components/SCMDButton';
 import { SCMDCard } from '../../../common/interfaces/components/SCMDCard';
 import { useDebounce } from '../../../common/hooks/useDebounce';
+import { DashboardErrorState, DashboardSpinner } from '../../../common/interfaces/components/DashboardUI';
+import { EmptyState } from '../../../superadmin/interfaces/components/EmptyState';
 
 interface Incident {
   id: string;
   type: string;
   severity: string;
   description: string;
-  status: 'reported' | 'investigating' | 'resolved' | 'closed';
+  status: string;
+  vendorId?: string;
+  contractId?: string;
+  siteId?: string;
+  vendor?: { id: string; name: string; riskLevel?: string; status?: string } | null;
+  contract?: { id: string; contractCode?: string; contractName?: string; status?: string } | null;
+  site?: { id: string; siteName?: string; address?: string; status?: string } | null;
   imageUri?: string;
   location?: any;
+  responseDueAt?: string;
+  resolutionDueAt?: string;
+  responseAcknowledgedAt?: string;
+  resolutionSubmittedAt?: string;
+  requiredEvidenceTypes?: string[];
+  slaBreached?: boolean;
   reportedAt: string;
   investigatingAt?: string;
   resolvedAt?: string;
@@ -30,10 +45,38 @@ interface Incident {
   assignedToId?: string;
   reporter?: { fullName: string; role: string };
   assignee?: { fullName: string; role: string };
+  timeline?: Array<{
+    id: string;
+    action: string;
+    actorId?: string;
+    actorRole?: string;
+    fromStatus?: string;
+    toStatus?: string;
+    notes?: string;
+    evidenceIds?: string[];
+    traceId?: string;
+    createdAt: string;
+  }>;
+  evidences?: Array<{
+    id: string;
+    kind: string;
+    fileUrl?: string;
+    uri?: string;
+    sourceType?: string;
+    status?: string;
+    note?: string;
+    capturedAt?: string;
+    createdAt: string;
+  }>;
 }
 
 export const IncidentLifecycleManager: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const priorityOnly = searchParams.get('priorityOnly') === 'true';
+  const focusId = searchParams.get('focusId');
+  const focusType = searchParams.get('focusType');
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [serverSummary, setServerSummary] = useState<{ total?: number; openCount?: number; criticalCount?: number; slaBreachedCount?: number } | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -54,16 +97,56 @@ export const IncidentLifecycleManager: React.FC = () => {
   const [assigningTo, setAssigningTo] = useState<string>('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [resolutionData, setResolutionData] = useState({ notes: '', images: [] as string[] });
+  const [highlightedIncidentId, setHighlightedIncidentId] = useState<string | null>(null);
+  const [incidentsError, setIncidentsError] = useState<string | null>(null);
+
+  const statusOf = (incident?: Incident | null) => (incident?.status || '').toUpperCase();
+  const statusLabel = (status?: string) => {
+    const value = (status || '').toUpperCase();
+    if (value === 'REPORTED') return 'Mới';
+    if (value === 'ACKNOWLEDGED') return 'Đã tiếp nhận';
+    if (value === 'ASSIGNED') return 'Đã giao';
+    if (value === 'INVESTIGATING') return 'Đang xử lý';
+    if (value === 'WAITING_VENDOR_RESPONSE') return 'Chờ nhà thầu';
+    if (value === 'RESOLVED_PENDING_APPROVAL' || value === 'RESOLVED') return 'Chờ nghiệm thu';
+    if (value === 'REOPENED') return 'Mở lại';
+    if (value === 'ESCALATED') return 'Escalated';
+    if (value === 'CLOSED') return 'Đã đóng';
+    if (value === 'CANCELLED') return 'Đã hủy';
+    return value || 'Không rõ';
+  };
+  const minutesUntil = (value?: string) => {
+    if (!value) return null;
+    return Math.round((new Date(value).getTime() - Date.now()) / 60000);
+  };
+  const statusClass = (status?: string) => {
+    const value = (status || '').toUpperCase();
+    if (value === 'REPORTED' || value === 'ACKNOWLEDGED') return 'bg-blue-500/5 text-blue-400 border-blue-500/20';
+    if (value === 'ASSIGNED' || value === 'INVESTIGATING' || value === 'WAITING_VENDOR_RESPONSE') return 'bg-amber-500/5 text-amber-400 border-amber-500/20';
+    if (value === 'RESOLVED_PENDING_APPROVAL' || value === 'RESOLVED') return 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20';
+    if (value === 'ESCALATED' || value === 'REOPENED') return 'bg-red-500/5 text-red-400 border-red-500/20';
+    return 'bg-scmd-navy text-scmd-silver/40 border-white/5';
+  };
+
+  const openIncident = async (incident: Incident) => {
+    setSelectedIncident(incident);
+    try {
+      const detail = await apiFetch<Incident>(`/api/tenant/incidents/${incident.id}`);
+      setSelectedIncident(detail);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     // Reset cursor when sort/filters change
     setCursorHistory([null]);
     setCursor(null);
-  }, [filter, severityFilter, sortBy, sortOrder, dateFilter, debouncedSearchTerm]);
+  }, [filter, severityFilter, assigneeFilter, sortBy, sortOrder, dateFilter, debouncedSearchTerm, priorityOnly]);
 
   useEffect(() => {
     fetchIncidents();
-  }, [cursor, pageSize, filter, severityFilter, sortBy, sortOrder, dateFilter, debouncedSearchTerm]);
+  }, [cursor, pageSize, filter, severityFilter, assigneeFilter, sortBy, sortOrder, dateFilter, debouncedSearchTerm, priorityOnly]);
 
   useEffect(() => {
     fetchStaff();
@@ -71,6 +154,7 @@ export const IncidentLifecycleManager: React.FC = () => {
 
   const fetchIncidents = async () => {
     setLoading(true);
+    setIncidentsError(null);
     try {
       const params = new URLSearchParams({
         limit: pageSize.toString(),
@@ -78,9 +162,24 @@ export const IncidentLifecycleManager: React.FC = () => {
         sortOrder
       });
 
-      // Pass additional filters that the backend now theoretically supports (backend currently only supports type/status properly mapped, but we can pass status)
       if (cursor) params.append('cursor', cursor);
       if (filter !== 'all') params.append('status', filter);
+      if (priorityOnly) params.append('priorityOnly', 'true');
+      if (severityFilter !== 'all') {
+        params.append('severity', severityFilter === 'high' ? 'HIGH' : severityFilter.toUpperCase());
+      }
+      if (assigneeFilter !== 'all') params.append('assigneeId', assigneeFilter);
+      if (debouncedSearchTerm.trim()) params.append('search', debouncedSearchTerm.trim());
+
+      if (dateFilter !== 'all') {
+        const now = new Date();
+        const from = new Date(now);
+        if (dateFilter === 'today') from.setHours(0, 0, 0, 0);
+        if (dateFilter === 'week') from.setDate(now.getDate() - 7);
+        if (dateFilter === 'month') from.setDate(now.getDate() - 30);
+        params.append('dateFrom', from.toISOString());
+        params.append('dateTo', now.toISOString());
+      }
       
       const result = await apiFetch<any>(`/api/tenant/incidents?${params.toString()}`);
       
@@ -88,14 +187,19 @@ export const IncidentLifecycleManager: React.FC = () => {
         setIncidents(result.items);
         setHasMore(result.hasMore || false);
         setNextCursor(result.nextCursor ?? null);
+        setServerSummary(result.summary || null);
       } else {
         setIncidents([]);
+      setServerSummary(null);
         setHasMore(false);
         setNextCursor(null);
+        setServerSummary(null);
       }
     } catch (err) {
       console.error(err);
       setIncidents([]);
+      setServerSummary(null);
+      setIncidentsError(err instanceof Error && err.message ? err.message : 'Không thể tải danh sách sự cố. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }
@@ -130,7 +234,7 @@ export const IncidentLifecycleManager: React.FC = () => {
   const incidentsLast24h = useMemo(() => {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     return incidents.filter(i => 
-      i.status === 'closed' && 
+      statusOf(i) === 'CLOSED' && 
       i.closedAt && 
       new Date(i.closedAt) >= twentyFourHoursAgo
     ).length;
@@ -176,6 +280,26 @@ export const IncidentLifecycleManager: React.FC = () => {
     }
   };
 
+  const handleRejectResolution = async () => {
+    if (!selectedIncident) return;
+    const reopenReason = window.prompt('Lý do mở lại sự cố');
+    if (!reopenReason) return;
+    const requiredNextAction = window.prompt('Hành động tiếp theo bắt buộc') || reopenReason;
+    setSubmitting(true);
+    try {
+      await apiFetch(`/api/tenant/incidents/${selectedIncident.id}/reject-resolution`, {
+        method: 'POST',
+        body: JSON.stringify({ reopenReason, requiredNextAction })
+      });
+      await fetchIncidents();
+      setSelectedIncident(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const filteredIncidents = useMemo(() => {
     return incidents
       .filter(i => {
@@ -193,13 +317,35 @@ export const IncidentLifecycleManager: React.FC = () => {
           dateFilter === 'month' ? (now.getTime() - reportedDate.getTime()) <= 30 * 24 * 60 * 60 * 1000 : true
         );
 
-        const matchesSearch = i.description.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || 
-                              i.type.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-                              i.reporter?.fullName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-                              (i.assignee?.fullName || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase());
-        return matchesSeverity && matchesDate && matchesSearch;
+        const matchesAssignee = assigneeFilter === 'all' || i.assignedToId === assigneeFilter;
+        const q = debouncedSearchTerm.toLowerCase();
+        const matchesSearch = !q || i.description.toLowerCase().includes(q) || 
+                              i.type.toLowerCase().includes(q) ||
+                              (i.reporter?.fullName || '').toLowerCase().includes(q) ||
+                              (i.assignee?.fullName || '').toLowerCase().includes(q) ||
+                              (i.vendor?.name || '').toLowerCase().includes(q) ||
+                              (i.site?.siteName || '').toLowerCase().includes(q) ||
+                              (i.contract?.contractCode || '').toLowerCase().includes(q);
+        return matchesSeverity && matchesDate && matchesAssignee && matchesSearch;
       });
-  }, [incidents, severityFilter, dateFilter, debouncedSearchTerm]);
+  }, [incidents, severityFilter, dateFilter, assigneeFilter, debouncedSearchTerm]);
+
+  useEffect(() => {
+    if (!focusId || focusType !== 'incident' || loading) return;
+
+    const target = filteredIncidents.find((incident) => incident.id === focusId);
+    if (!target) return;
+
+    setHighlightedIncidentId(focusId);
+    const element = document.querySelector(`[data-incident-id="${CSS.escape(focusId)}"]`);
+    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    const timer = window.setTimeout(() => {
+      setHighlightedIncidentId((current) => current === focusId ? null : current);
+    }, 3500);
+
+    return () => window.clearTimeout(timer);
+  }, [filteredIncidents, focusId, focusType, loading]);
 
   const containerVariants = {
     initial: { opacity: 0 },
@@ -244,14 +390,14 @@ export const IncidentLifecycleManager: React.FC = () => {
         <SCMDCard className="p-6 bg-scmd-navy/50 border-white/5">
           <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest mb-1">Đang xử lý</p>
           <span className="text-3xl font-black text-amber-400">
-            {incidents.filter(i => ['reported', 'investigating'].includes(i.status)).length}
+            {serverSummary?.openCount ?? incidents.filter(i => !['CLOSED', 'CANCELLED'].includes(statusOf(i))).length}
           </span>
         </SCMDCard>
 
         <SCMDCard className="p-6 bg-scmd-navy/50 border-white/5">
           <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest mb-1">Khẩn cấp</p>
           <span className="text-3xl font-black text-red-500">
-            {incidents.filter(i => {
+            {serverSummary?.criticalCount ?? incidents.filter(i => {
               const s = (i.severity || '').toLowerCase();
               return s === 'high' || s === 'cao' || s === 'khẩn cấp' || s === 'critical';
             }).length}
@@ -274,7 +420,7 @@ export const IncidentLifecycleManager: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="flex bg-scmd-navy/50 p-1 rounded-2xl border border-white/5">
-                  {['all', 'reported', 'investigating', 'resolved', 'closed'].map(s => (
+                  {['all', 'reported', 'assigned', 'investigating', 'resolved_pending_approval', 'closed'].map(s => (
                     <button
                       key={s}
                       onClick={() => setFilter(s)}
@@ -283,7 +429,7 @@ export const IncidentLifecycleManager: React.FC = () => {
                         filter === s ? "bg-scmd-cyber text-scmd-navy shadow-lg shadow-scmd-cyber/20" : "text-scmd-silver/40 hover:text-white"
                       )}
                     >
-                      {s === 'all' ? 'Tất cả' : s === 'reported' ? 'Mới' : s === 'investigating' ? 'Đang xử lý' : s === 'resolved' ? 'Đã xử lý' : 'Đã đóng'}
+                      {s === 'all' ? 'Tất cả' : statusLabel(s)}
                     </button>
                   ))}
                 </div>
@@ -419,12 +565,13 @@ export const IncidentLifecycleManager: React.FC = () => {
                   </button>
                </div>
                
-               {(filter !== 'all' || severityFilter !== 'all' || dateFilter !== 'all' || searchTerm || sortBy !== 'date' || sortOrder !== 'desc') && (
+               {(filter !== 'all' || severityFilter !== 'all' || assigneeFilter !== 'all' || dateFilter !== 'all' || searchTerm || sortBy !== 'date' || sortOrder !== 'desc') && (
                  <button
                     onClick={() => {
                       setFilter('all');
                       setSeverityFilter('all');
                       setDateFilter('all');
+                      setAssigneeFilter('all');
                       setSearchTerm('');
                       setSortBy('date');
                       setSortOrder('desc');
@@ -476,15 +623,21 @@ export const IncidentLifecycleManager: React.FC = () => {
 
           <div className="space-y-3">
             {loading ? (
-              <div className="flex flex-col items-center justify-center p-24 gap-4">
-                <Loader2 className="animate-spin text-scmd-cyber w-8 h-8" />
-                <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-[0.2em]">Đang tải dữ liệu thực tế...</p>
-              </div>
+              <DashboardSpinner message="Đang tải dữ liệu thực tế..." className="p-24 py-24" />
+            ) : incidentsError ? (
+              <DashboardErrorState
+                title="Không thể tải danh sách sự cố"
+                description={incidentsError}
+                onRetry={fetchIncidents}
+                className="py-24"
+              />
             ) : filteredIncidents.length === 0 ? (
-              <div className="text-center py-24 bg-scmd-navy/20 rounded-[32px] border-2 border-dashed border-white/5">
-                <ShieldAlert size={40} className="mx-auto mb-4 text-scmd-silver/20" />
-                <p className="text-xs font-black text-scmd-silver/40 uppercase tracking-widest">Không tìm thấy sự cố nào khớp yêu cầu</p>
-              </div>
+              <EmptyState
+                icon={<ShieldAlert size={40} />}
+                title="Không tìm thấy sự cố nào khớp yêu cầu"
+                description="Thử điều chỉnh bộ lọc, khoảng thời gian hoặc quay về chế độ xem tất cả sự cố."
+                className="rounded-3xl border-dashed bg-scmd-navy/20 py-24"
+              />
             ) : (
               <div className="space-y-2">
                 {viewMode === 'list' ? (
@@ -508,12 +661,14 @@ export const IncidentLifecycleManager: React.FC = () => {
                         const isMedium = normSeverity === 'medium' || normSeverity === 'trung bình';
                         
                         return (
-                          <SCMDCard 
+                          <SCMDCard
                             key={incident.id}
-                            onClick={() => setSelectedIncident(incident)}
+                            data-incident-id={incident.id}
+                            onClick={() => openIncident(incident)}
                             className={cn(
                               "p-4 cursor-pointer transition-all border-white/5 flex items-center hover:bg-scmd-navy/40 relative group",
-                              selectedIncident?.id === incident.id ? "border-scmd-cyber bg-scmd-cyber/5 shadow-huge" : "hover:border-white/20"
+                              selectedIncident?.id === incident.id ? "border-scmd-cyber bg-scmd-cyber/5 shadow-huge" : "hover:border-white/20",
+                              highlightedIncidentId === incident.id && "border-scmd-primary/70 bg-scmd-primary/10 ring-2 ring-scmd-primary/40 shadow-lg shadow-scmd-primary/15"
                             )}
                           >
                             <div className="w-12 flex justify-center">
@@ -538,9 +693,9 @@ export const IncidentLifecycleManager: React.FC = () => {
                               <p className="text-[10px] text-scmd-silver/40 font-medium truncate pr-4">{incident.description}</p>
                             </div>
 
-                            <div className="w-32 flex flex-col justify-center gap-0.5">
-                              <span className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-tight">Khu vực tòa A</span>
-                              <span className="text-[8px] font-bold text-scmd-silver/20 uppercase tracking-widest">Lầu 4 - GPS Match</span>
+                            <div className="w-40 flex flex-col justify-center gap-0.5">
+                              <span className="text-[10px] font-black text-scmd-silver/60 uppercase tracking-tight truncate">{incident.site?.siteName || incident.siteId || 'Chưa gán site'}</span>
+                              <span className="text-[8px] font-bold text-scmd-silver/30 uppercase tracking-widest truncate">{incident.vendor?.name || incident.vendorId || 'Chưa gán nhà thầu'}</span>
                             </div>
 
                             <div className="w-28 flex items-center gap-2">
@@ -590,14 +745,9 @@ export const IncidentLifecycleManager: React.FC = () => {
                             <div className="w-24 flex justify-center">
                               <span className={cn(
                                 "text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest border",
-                                incident.status === 'reported' ? "bg-blue-500/5 text-blue-400 border-blue-500/20" :
-                                incident.status === 'investigating' ? "bg-amber-500/5 text-amber-400 border-amber-500/20" :
-                                incident.status === 'resolved' ? "bg-emerald-500/5 text-emerald-400 border-emerald-500/20" :
-                                "bg-scmd-navy text-scmd-silver/40 border-white/5"
+                                statusClass(incident.status)
                               )}>
-                                {incident.status === 'reported' ? 'Mới' : 
-                                 incident.status === 'investigating' ? 'Đang xử lý' : 
-                                 incident.status === 'resolved' ? 'Xong' : 'Đóng'}
+                                {statusLabel(incident.status)}
                               </span>
                             </div>
 
@@ -619,12 +769,14 @@ export const IncidentLifecycleManager: React.FC = () => {
                       const isHigh = normSeverity === 'high' || normSeverity === 'cao' || normSeverity === 'khẩn cấp';
                       
                       return (
-                        <SCMDCard 
+                        <SCMDCard
                           key={incident.id}
-                          onClick={() => setSelectedIncident(incident)}
+                          data-incident-id={incident.id}
+                          onClick={() => openIncident(incident)}
                           className={cn(
                             "p-5 cursor-pointer transition-all border-white/5 hover:bg-scmd-navy/40 relative group flex flex-col gap-4",
-                            selectedIncident?.id === incident.id ? "border-scmd-cyber bg-scmd-cyber/5 shadow-huge ring-1 ring-scmd-cyber/50" : "hover:border-white/20"
+                            selectedIncident?.id === incident.id ? "border-scmd-cyber bg-scmd-cyber/5 shadow-huge ring-1 ring-scmd-cyber/50" : "hover:border-white/20",
+                            highlightedIncidentId === incident.id && "border-scmd-primary/70 bg-scmd-primary/10 ring-2 ring-scmd-primary/40 shadow-lg shadow-scmd-primary/15"
                           )}
                         >
                           <div className="flex justify-between items-start">
@@ -636,14 +788,9 @@ export const IncidentLifecycleManager: React.FC = () => {
                             </div>
                             <span className={cn(
                               "text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest border",
-                              incident.status === 'reported' ? "bg-blue-500/5 text-blue-400 border-blue-500/20" :
-                              incident.status === 'investigating' ? "bg-amber-500/5 text-amber-400 border-amber-500/20" :
-                              incident.status === 'resolved' ? "bg-emerald-500/5 text-emerald-400 border-emerald-500/20" :
-                              "bg-scmd-navy text-scmd-silver/40 border-white/5"
+                              statusClass(incident.status)
                             )}>
-                              {incident.status === 'reported' ? 'Mới' : 
-                               incident.status === 'investigating' ? 'Xử lý' : 
-                               incident.status === 'resolved' ? 'Xong' : 'Đóng'}
+                              {statusLabel(incident.status)}
                             </span>
                           </div>
 
@@ -726,11 +873,98 @@ export const IncidentLifecycleManager: React.FC = () => {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { label: 'Phản hồi SLA', value: selectedIncident.responseDueAt, done: !!selectedIncident.responseAcknowledgedAt },
+                        { label: 'Xử lý SLA', value: selectedIncident.resolutionDueAt, done: ['CLOSED', 'CANCELLED'].includes(statusOf(selectedIncident)) }
+                      ].map((item) => {
+                        const left = minutesUntil(item.value);
+                        const breached = !item.done && left !== null && left < 0;
+                        return (
+                          <div key={item.label} className={cn(
+                            "p-3 rounded-2xl border bg-scmd-navy/50",
+                            breached || selectedIncident.slaBreached ? "border-red-500/30 text-red-300" : "border-white/5 text-scmd-silver/40"
+                          )}>
+                            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest">
+                              <Clock size={12} /> {item.label}
+                            </div>
+                            <p className="mt-2 text-xs font-black text-white">
+                              {item.done ? 'Đạt' : left === null ? 'Chưa gán' : left >= 0 ? `Còn ${left} phút` : `Quá ${Math.abs(left)} phút`}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="p-4 rounded-2xl border border-white/5 bg-scmd-navy/50">
+                        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-scmd-silver/40 mb-2">
+                          <MapPin size={12} /> Ngữ cảnh đối soát
+                        </div>
+                        <div className="space-y-1 text-xs font-bold">
+                          <p className="text-white">Site: {selectedIncident.site?.siteName || selectedIncident.siteId || 'Chưa liên kết'}</p>
+                          <p className="text-scmd-silver/60">Nhà thầu: {selectedIncident.vendor?.name || selectedIncident.vendorId || 'Chưa liên kết'}</p>
+                          <p className="text-scmd-silver/60">Hợp đồng: {selectedIncident.contract?.contractCode || selectedIncident.contract?.contractName || selectedIncident.contractId || 'Chưa liên kết'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(selectedIncident.timeline?.length || 0) > 0 && (
+                      <div className="p-4 bg-scmd-navy/50 rounded-2xl border border-white/5 space-y-3">
+                        <div className="flex items-center gap-2 text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">
+                          <Activity size={12} className="text-scmd-cyber" /> Timeline SLA
+                        </div>
+                        <div className="max-h-56 overflow-y-auto pr-1 space-y-3">
+                          {(selectedIncident.timeline || []).map((event) => (
+                            <div key={event.id} className="border-l border-scmd-cyber/30 pl-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[10px] font-black text-white uppercase">{event.action}</p>
+                                <span className="text-[8px] font-bold text-scmd-silver/30">
+                                  {new Date(event.createdAt).toLocaleString('vi-VN')}
+                                </span>
+                              </div>
+                              <p className="text-[9px] text-scmd-silver/40 font-bold">
+                                {event.fromStatus ? `${statusLabel(event.fromStatus)} -> ${statusLabel(event.toStatus)}` : statusLabel(event.toStatus)}
+                              </p>
+                              {event.notes && <p className="text-[10px] text-scmd-silver/60 mt-1 line-clamp-2">{event.notes}</p>}
+                              {event.traceId && <p className="text-[8px] text-scmd-silver/20 font-mono mt-1">trace {event.traceId.slice(0, 12)}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {(selectedIncident.evidences?.length || 0) > 0 && (
+                      <div className="p-4 bg-scmd-navy/50 rounded-2xl border border-white/5 space-y-3">
+                        <div className="flex items-center gap-2 text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">
+                          <FileText size={12} className="text-scmd-cyber" /> Evidence chain
+                        </div>
+                        {(selectedIncident.evidences || []).map((evidence) => (
+                          <div key={evidence.id} className="flex items-start justify-between gap-3 rounded-xl border border-white/5 bg-scmd-navy/60 p-3">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-black text-white uppercase">{evidence.kind} · {evidence.sourceType || 'INCIDENT'}</p>
+                              <p className="text-[9px] text-scmd-silver/40 truncate">{evidence.note || evidence.fileUrl || evidence.uri || evidence.id}</p>
+                            </div>
+                            <span className={cn(
+                              "shrink-0 rounded-lg border px-2 py-1 text-[8px] font-black uppercase",
+                              evidence.status === 'ACTIVE' ? "border-emerald-500/20 text-emerald-400" : "border-red-500/20 text-red-400"
+                            )}>{evidence.status || 'ACTIVE'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div className="p-4 bg-scmd-navy/50 rounded-2xl border border-white/5 space-y-3">
                        <div className="flex items-center gap-2 text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">
                           <MapPin size={12} className="text-scmd-cyber" /> Vị trí xác thực
                        </div>
-                       <p className="text-[10px] text-scmd-silver/40 font-bold leading-relaxed">Khu vực tòa nhà A - Lầu 4<br/><span className="text-scmd-silver/20">(Dựa trên GPS & Checkpoint: CP-04)</span></p>
+                       <p className="text-[10px] text-scmd-silver/40 font-bold leading-relaxed">
+                         {selectedIncident.site?.address || 'Chưa có địa chỉ site'}
+                         <br/>
+                         <span className="text-scmd-silver/20">
+                           {selectedIncident.location ? `Dữ liệu GPS: ${typeof selectedIncident.location === 'string' ? selectedIncident.location : JSON.stringify(selectedIncident.location)}` : 'Chưa có dữ liệu GPS / checkpoint xác thực'}
+                         </span>
+                       </p>
                        {selectedIncident.imageUri && (
                          <div className="relative group overflow-hidden rounded-xl mt-2">
                           <img src={selectedIncident.imageUri} className="w-full h-40 object-cover transition-transform duration-500 group-hover:scale-105" />
@@ -743,8 +977,19 @@ export const IncidentLifecycleManager: React.FC = () => {
 
                     {/* Actions Panel */}
                     <div className="space-y-4 pt-4 border-t border-white/5">
-                       {selectedIncident.status === 'reported' && (
+                       {['REPORTED', 'ACKNOWLEDGED'].includes(statusOf(selectedIncident)) && (
                          <div className="space-y-4">
+                            {statusOf(selectedIncident) === 'REPORTED' && (
+                              <SCMDButton
+                                onClick={() => handleUpdateStatus('ACKNOWLEDGED')}
+                                disabled={submitting}
+                                isLoading={submitting}
+                                className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl"
+                              >
+                                {!submitting && <CheckCircle2 size={18} />}
+                                TIẾP NHẬN SỰ CỐ
+                              </SCMDButton>
+                            )}
                             <div className="space-y-2">
                               <label className="text-[10px] font-black text-scmd-cyber uppercase tracking-widest block ml-1">Điều phối nhân sự</label>
                               <select 
@@ -770,7 +1015,7 @@ export const IncidentLifecycleManager: React.FC = () => {
                          </div>
                        )}
 
-                       {selectedIncident.status === 'investigating' && (
+                       {['ASSIGNED', 'INVESTIGATING', 'WAITING_VENDOR_RESPONSE', 'ESCALATED', 'REOPENED'].includes(statusOf(selectedIncident)) && (
                          <div className="space-y-4">
                             <div className="space-y-2">
                               <label className="text-[10px] font-black text-scmd-cyber uppercase tracking-widest block ml-1">Biên bản hiện trường</label>
@@ -786,7 +1031,7 @@ export const IncidentLifecycleManager: React.FC = () => {
                                   <Camera size={18} /> ẢNH
                                </button>
                                <SCMDButton 
-                                onClick={() => handleUpdateStatus('resolved')}
+                                onClick={() => handleUpdateStatus('RESOLVED_PENDING_APPROVAL')}
                                 disabled={!resolutionData.notes || submitting}
                                 isLoading={submitting}
                                 className="flex-[2] h-14 bg-emerald-500 hover:bg-emerald-400 text-scmd-navy font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 border-none transition-all active:scale-95"
@@ -798,14 +1043,14 @@ export const IncidentLifecycleManager: React.FC = () => {
                          </div>
                        )}
 
-                       {selectedIncident.status === 'resolved' && (
+                       {['RESOLVED', 'RESOLVED_PENDING_APPROVAL'].includes(statusOf(selectedIncident)) && (
                          <div className="space-y-4">
                            <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl mb-2">
                               <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Ghi chú xử lý:</p>
                               <p className="text-[10px] text-scmd-silver/40 font-medium ">"{selectedIncident.resolutionNotes || 'Không có ghi chú'}"</p>
                            </div>
                            <SCMDButton 
-                             onClick={() => handleUpdateStatus('closed')}
+                             onClick={() => handleUpdateStatus('CLOSED')}
                              disabled={submitting}
                              isLoading={submitting}
                              className="w-full h-16 bg-white text-scmd-navy font-black rounded-[24px] flex items-center justify-center gap-3 hover:bg-slate-200 transition-all active:scale-95 shadow-2xl"
@@ -816,6 +1061,13 @@ export const IncidentLifecycleManager: React.FC = () => {
                                  <p className="text-[8px] opacity-60 tracking-widest uppercase">Đóng hồ sơ sự cố</p>
                                </div>
                            </SCMDButton>
+                           <button
+                             onClick={handleRejectResolution}
+                             disabled={submitting}
+                             className="w-full h-12 rounded-2xl border border-red-500/20 bg-red-500/5 text-[10px] font-black text-red-300 uppercase tracking-widest hover:bg-red-500/10 disabled:opacity-50"
+                           >
+                             Reject và mở lại
+                           </button>
                          </div>
                        )}
                     </div>

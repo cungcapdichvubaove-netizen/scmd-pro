@@ -6,6 +6,7 @@ import { MediaService } from '../../core/media/media.service.js';
 import { cache } from '../../core/cache/index.js';
 
 import { SubscriptionPlan } from '@prisma/client';
+import { resolveTenantFeatureFlags } from '../../../shared/business/feature-flags.js';
 
 export class SuperAdminService {
   static async getStats() {
@@ -223,12 +224,31 @@ export class SuperAdminService {
 
   static async updateTenantFeatures(tenantId: string, features: any) {
     logger.info({ tenantId, features }, 'Updating tenant features_enabled');
+    const current = await db.system().tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, subscriptionPlan: true, plan: true, featuresEnabled: true }
+    });
+    if (!current) {
+      throw new Error('TENANT_NOT_FOUND');
+    }
+
+    const normalizedFeatures = resolveTenantFeatureFlags(current.subscriptionPlan ?? current.plan, features);
     const result = await db.system().tenant.update({
       where: { id: tenantId },
-      data: { featuresEnabled: features }
+      data: { featuresEnabled: normalizedFeatures }
     });
+    await Promise.all([
+      cache.del(`tenant:${tenantId}`),
+      cache.del(`tenant:status:${tenantId}`),
+      cache.del(`tenant:features:${tenantId}`),
+    ]);
     await this.invalidateAdminCaches();
-    return result;
+    return {
+      tenantId,
+      before: current.featuresEnabled ?? {},
+      after: normalizedFeatures,
+      tenant: result,
+    };
   }
   
   static async updateTenantMaxEmployees(tenantId: string, count: number) {

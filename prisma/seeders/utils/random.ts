@@ -2,11 +2,11 @@ export function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-export function randomElement<T>(arr: T[]): T {
+export function randomElement<T>(arr: readonly T[]): T {
   return arr[randomInt(0, arr.length - 1)];
 }
 
-export function randomElements<T>(arr: T[], count: number): T[] {
+export function randomElements<T>(arr: readonly T[], count: number): T[] {
   const shuffled = [...arr].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, count);
 }

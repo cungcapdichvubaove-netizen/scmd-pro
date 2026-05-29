@@ -23,10 +23,21 @@ Hệ thống tự động hậu kiểm tọa độ thực tế của nhân viên
 ## CI/CD Pipeline
 
 Hệ thống tích hợp quy trình CI/CD tự động qua GitHub Actions (.github/workflows/ci.yml):
+- **Secret hygiene**: Chặn `.env`, private key và hardcoded seed secrets bằng `npm run security:scan`.
 - **Phân tích tĩnh**: Linting code qua ESLint.
 - **Kiểm thử tự động**: Chạy bộ test Vitest (Unit & Integration).
 - **An toàn Migration**: Tự động kiểm tra sai lệch Schema Prisma vs Migrations (`migrate diff`).
 - **Build Integrity**: Đảm bảo ứng dụng có thể build thành công trước khi deploy.
+
+## Pre-commit Security Hook
+
+Kích hoạt hook một lần sau khi clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Hook này chạy `npm run security:scan` trước commit.
 
 ## Triển khai
 Sử dụng Docker Compose để chạy toàn bộ hệ thống (Postgres, Redis, Django/Node).

@@ -5,6 +5,7 @@ import { AuditService } from '../../core/audit/audit.service.js';
 import { NotificationService } from '../../modules/notification/notification.service.js';
 import { QueueService } from '../queue/index.js';
 import { IncidentStatus, IncidentSeverity } from '@prisma/client';
+import { normalizeViolationEventStatus } from '../../shared/business/violation-lifecycle.js';
 
 // Mock dependencies
 vi.mock('../../core/db/prisma.js', () => ({
@@ -66,6 +67,7 @@ describe('OutboxProcessor E2E - SOS Flow', () => {
   it('should process SOS_SIGNAL, create incident, schedule escalation and send notification', async () => {
     // 1. Setup mock Transaction and DB calls
     const mockTx = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
       eventOutbox: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         update: vi.fn().mockResolvedValue({}),
@@ -156,6 +158,7 @@ describe('OutboxProcessor E2E - SOS Flow', () => {
     };
 
     const mockTx = {
+        $executeRaw: vi.fn().mockResolvedValue(undefined),
         $queryRaw: vi.fn().mockResolvedValue([failingEvent]),
         eventOutbox: {
             updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -182,6 +185,227 @@ describe('OutboxProcessor E2E - SOS Flow', () => {
             status: 'DEAD_LETTER',
             attempts: 5
         })
+    }));
+  });
+
+  it('should create patrol violation events from PATROL_SESSION_COMPLETED outbox payload', async () => {
+    const completedEvent = {
+      id: 'event-patrol-001',
+      eventType: 'PATROL_SESSION_COMPLETED',
+      tenantId: mockTenantId,
+      traceId: mockTraceId,
+      version: '1.0',
+      payload: {
+        _actorId: mockActorId,
+        sessionId: 'session-001',
+        status: 'PARTIAL',
+        complianceScore: 72,
+        completionPercent: 80,
+        shouldCreateViolation: true,
+        violationTypes: ['GPS_VIOLATION', 'MISSING_EVIDENCE'],
+      },
+      attempts: 0,
+    };
+
+    const completedAt = new Date('2026-05-22T08:00:00.000Z');
+    const mockSession = {
+      id: 'session-001',
+      tenantId: mockTenantId,
+      vendorId: 'vendor-001',
+      contractId: 'contract-001',
+      siteId: 'site-001',
+      staffId: mockActorId,
+      status: 'PARTIAL',
+      completedAt,
+      completionPercent: 80,
+      complianceScore: 72,
+      missedCheckpointCount: 1,
+      lateCheckpointCount: 2,
+      gpsViolationCount: 1,
+      evidenceMissingCount: 3,
+      exceptionSummary: {
+        violationTypes: ['GPS_VIOLATION', 'MISSING_EVIDENCE'],
+      },
+    };
+
+    const mockTx = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      $queryRaw: vi.fn().mockResolvedValue([completedEvent]),
+      eventOutbox: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      patrolSession: {
+        findUnique: vi.fn().mockResolvedValue(mockSession),
+      },
+      violationEvent: {
+        upsert: vi.fn().mockResolvedValue({}),
+      },
+    };
+
+    vi.mocked(db.system).mockReturnValue({
+      $transaction: vi.fn().mockImplementation(async (cb) => cb(mockTx))
+    } as any);
+
+    vi.mocked(db.withTenant).mockImplementation(async (tId, cb) => {
+      expect(tId).toBe(mockTenantId);
+      return cb(mockTx);
+    });
+
+    await OutboxProcessor.processPendingEvents();
+
+    expect(mockTx.patrolSession.findUnique).toHaveBeenCalledWith({
+      where: { id: 'session-001' },
+      select: expect.objectContaining({
+        id: true,
+        vendorId: true,
+        contractId: true,
+        siteId: true,
+        staffId: true,
+        exceptionSummary: true,
+      }),
+    });
+
+    expect(mockTx.violationEvent.upsert).toHaveBeenCalledTimes(2);
+    expect(mockTx.violationEvent.upsert).toHaveBeenNthCalledWith(1, {
+      where: {
+        tenantId_idempotencyKey: {
+          tenantId: mockTenantId,
+          idempotencyKey: 'patrol:session-001:GPS_VIOLATION',
+        },
+      },
+      update: expect.objectContaining({
+        status: normalizeViolationEventStatus('PENDING_REVIEW'),
+        occurredAt: completedAt,
+        evidence: {
+          missedCheckpointCount: 1,
+          lateCheckpointCount: 2,
+          gpsViolationCount: 1,
+          evidenceMissingCount: 3,
+        },
+        metadata: expect.objectContaining({
+          sourceEventId: 'event-patrol-001',
+          sourceEventType: 'PATROL_SESSION_COMPLETED',
+          sessionStatus: 'PARTIAL',
+          complianceScore: 72,
+          completionPercent: 80,
+          exceptionSummary: mockSession.exceptionSummary,
+        }),
+      }),
+      create: expect.objectContaining({
+        tenantId: mockTenantId,
+        vendorId: 'vendor-001',
+        contractId: 'contract-001',
+        siteId: 'site-001',
+        staffId: mockActorId,
+        patrolSessionId: 'session-001',
+        sourceType: 'PATROL_SESSION',
+        violationType: 'GPS_VIOLATION',
+        severity: 'HIGH',
+        status: normalizeViolationEventStatus('PENDING_REVIEW'),
+        occurredAt: completedAt,
+        idempotencyKey: 'patrol:session-001:GPS_VIOLATION',
+        evidence: {
+          missedCheckpointCount: 1,
+          lateCheckpointCount: 2,
+          gpsViolationCount: 1,
+          evidenceMissingCount: 3,
+        },
+        metadata: expect.objectContaining({
+          sourceEventId: 'event-patrol-001',
+          sourceEventType: 'PATROL_SESSION_COMPLETED',
+          sessionStatus: 'PARTIAL',
+          complianceScore: 72,
+          completionPercent: 80,
+          exceptionSummary: mockSession.exceptionSummary,
+        }),
+      }),
+    });
+
+    expect(mockTx.violationEvent.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: {
+        tenantId_idempotencyKey: {
+          tenantId: mockTenantId,
+          idempotencyKey: 'patrol:session-001:MISSING_EVIDENCE',
+        },
+      },
+      create: expect.objectContaining({
+        violationType: 'MISSING_EVIDENCE',
+        severity: 'MEDIUM',
+      }),
+    }));
+
+    expect(mockTx.eventOutbox.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'event-patrol-001' },
+      data: expect.objectContaining({
+        status: 'PROCESSED',
+      }),
+    }));
+  });
+
+  it('should preserve domain staffId from STAFF_UPDATED payload across audit and notification side effects', async () => {
+    const updatedEvent = {
+      id: 'event-staff-updated-001',
+      eventType: 'STAFF_UPDATED',
+      tenantId: mockTenantId,
+      traceId: mockTraceId,
+      version: '1.1',
+      payload: {
+        _actorId: 'admin-001',
+        staffId: 'staff-domain-001',
+        fullName: 'Guard Domain',
+        before: { fullName: 'Guard Legacy', role: 'guard', status: 'active' },
+        after: { fullName: 'Guard Domain', role: 'guard', status: 'inactive' },
+      },
+      attempts: 0,
+    };
+
+    const mockTx = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      $queryRaw: vi.fn().mockResolvedValue([updatedEvent]),
+      eventOutbox: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    };
+
+    vi.mocked(db.system).mockReturnValue({
+      $transaction: vi.fn().mockImplementation(async (cb) => cb(mockTx))
+    } as any);
+
+    vi.mocked(db.withTenant).mockImplementation(async (tId, cb) => {
+      expect(tId).toBe(mockTenantId);
+      return cb(mockTx);
+    });
+
+    const logSensitiveChangeMock = vi.fn().mockResolvedValue(undefined);
+    (AuditService as any).logSensitiveChange = logSensitiveChangeMock;
+    vi.mocked(NotificationService.create).mockResolvedValue({ id: 'notif-staff-1' } as any);
+
+    await OutboxProcessor.processPendingEvents();
+
+    expect(logSensitiveChangeMock).toHaveBeenCalledWith(
+      'admin-001',
+      mockTenantId,
+      'UPDATE_STAFF',
+      'staff/staff-domain-001',
+      updatedEvent.payload.before,
+      updatedEvent.payload.after,
+      undefined,
+      mockTx,
+    );
+
+    expect(NotificationService.create).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: mockTenantId,
+      title: 'Cập nhật nhân viên',
+      type: 'INFO',
+      metadata: { staffId: 'staff-domain-001' },
+      message: expect.stringContaining('Guard Domain'),
+    }), mockTx);
+
+    expect(mockTx.eventOutbox.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'event-staff-updated-001' },
+      data: expect.objectContaining({ status: 'PROCESSED' }),
     }));
   });
 });

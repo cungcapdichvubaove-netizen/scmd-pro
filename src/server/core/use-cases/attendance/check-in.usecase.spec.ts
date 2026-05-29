@@ -1,12 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AttendanceCheckInUseCase } from './check-in.usecase.js';
 import { db } from '../../db/prisma.js';
+import { PatrolRepository } from '../../../modules/patrol/repositories/patrol.repository.js';
 
 // Mock dependencies
 vi.mock('../../db/prisma.js', () => ({
   db: {
     forTenant: vi.fn(),
   }
+}));
+
+vi.mock('../../../modules/patrol/repositories/patrol.repository.js', () => ({
+  PatrolRepository: {
+    getCheckpointById: vi.fn(),
+  },
 }));
 
 describe('AttendanceCheckInUseCase', () => {
@@ -34,7 +41,7 @@ describe('AttendanceCheckInUseCase', () => {
       attendanceRecord: { findFirst: mockFindFirst } as any
     } as any);
 
-    await expect(useCase.execute(mockContext, mockPayload)).rejects.toThrow('ALREADY_CHECKED_IN');
+    await expect(useCase.execute(mockContext, mockPayload)).rejects.toThrow('check-in');
     
     expect(db.forTenant).toHaveBeenCalledWith(mockContext.tenantId);
     expect(mockFindFirst).toHaveBeenCalledWith(expect.objectContaining({
@@ -48,7 +55,7 @@ describe('AttendanceCheckInUseCase', () => {
 
   it('should create a new check-in record successfully', async () => {
     const mockFindFirst = vi.fn().mockResolvedValue(null);
-    const mockCreate = vi.fn().mockResolvedValue({ id: 'new-record', type: 'CHECK_IN', lateMinutes: 0 });
+    const mockCreate = vi.fn().mockResolvedValue({ id: 'new-record', type: 'CHECK_IN', lateMinutes: 0, isValid: false });
     
     vi.mocked(db.forTenant).mockReturnValue({
       attendanceRecord: { 
@@ -68,7 +75,13 @@ describe('AttendanceCheckInUseCase', () => {
         tenantId: mockContext.tenantId,
         staffId: mockContext.userId,
         type: 'CHECK_IN',
-        imageUri: mockPayload.imageUri
+        imageUri: mockPayload.imageUri,
+        isValid: false,
+        metadata: expect.objectContaining({
+          isSuspicious: true,
+          checkpointId: null,
+          distanceMeters: null,
+        })
       })
     }));
   });
@@ -109,5 +122,72 @@ describe('AttendanceCheckInUseCase', () => {
     }));
 
     vi.useRealTimers();
+  });
+
+  it('should persist suspicious GPS metadata with the real checkpoint distance', async () => {
+    const mockFindFirst = vi.fn().mockResolvedValue(null);
+    const mockCreate = vi.fn().mockImplementation((args) => Promise.resolve({ id: 'new-record', ...args.data }));
+
+    vi.mocked(db.forTenant).mockReturnValue({
+      attendanceRecord: {
+        findFirst: mockFindFirst,
+        create: mockCreate
+      } as any,
+      shiftSchedule: {
+        findUnique: vi.fn()
+      } as any
+    } as any);
+
+    vi.mocked(PatrolRepository.getCheckpointById).mockResolvedValue({
+      id: 'checkpoint-1',
+      latitude: 10,
+      longitude: 20.001,
+    } as any);
+
+    await useCase.execute(mockContext, {
+      ...mockPayload,
+      location: { lat: 10, lon: 20 },
+      checkpointId: 'checkpoint-1',
+    });
+
+    const createArg = mockCreate.mock.calls[0][0];
+    expect(createArg.data.isValid).toBe(false);
+    expect(createArg.data.metadata).toEqual(expect.objectContaining({
+      isSuspicious: true,
+      distanceMeters: 110,
+    }));
+  });
+
+  it('should always persist ctx.userId as staffId even if payload carries adjacent staffId field', async () => {
+    const mockFindFirst = vi.fn().mockResolvedValue(null);
+    const mockCreate = vi.fn().mockImplementation((args) => Promise.resolve({ id: 'new-record', ...args.data }));
+
+    vi.mocked(db.forTenant).mockReturnValue({
+      attendanceRecord: {
+        findFirst: mockFindFirst,
+        create: mockCreate
+      } as any,
+      shiftSchedule: {
+        findUnique: vi.fn()
+      } as any
+    } as any);
+
+    await useCase.execute(mockContext, {
+      ...mockPayload,
+      checkpointId: undefined,
+      staffId: 'forged-staff-id'
+    } as any);
+
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        tenantId: mockContext.tenantId,
+        staffId: mockContext.userId,
+      })
+    }));
+    expect(mockFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        staffId: mockContext.userId,
+      })
+    }));
   });
 });

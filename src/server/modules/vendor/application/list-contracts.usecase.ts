@@ -5,7 +5,7 @@ import { Contract } from '@prisma/client';
 
 export class ListContractsUseCase extends BaseUseCase<{cursor?: string; limit?: number; view?: string}, { data: Contract[], nextCursor: string | null; hasMore: boolean }> {
   protected async authorize(context: SecurityContext): Promise<void> {
-    const allowedRoles = [UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN];
+    const allowedRoles = [UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN, UserRole.VENDOR_COMMANDER, UserRole.VENDOR_REPRESENTATIVE];
     if (!allowedRoles.includes(context.role as UserRole)) {
       throw new Error('FORBIDDEN_ACCESS');
     }

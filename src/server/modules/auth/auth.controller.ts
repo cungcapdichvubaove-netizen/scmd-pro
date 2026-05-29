@@ -9,6 +9,7 @@ import { RefreshTokenUseCase } from '../../core/use-cases/auth/refresh-token.use
 import { VerifyTrialUseCase } from '../../core/use-cases/auth/verify-trial.use-case.js';
 import { RequestContextResolver } from '../../core/context/index.js';
 import { AuditService } from '../../core/audit/audit.service.js';
+import { clearAuthCookies, getAuthCookies, getRefreshTokenCookie, hasValidCsrfToken, issueAuthCookies } from './auth.cookies.js';
 
 export class AuthController {
   
@@ -39,7 +40,12 @@ export class AuthController {
         }
       });
 
-      return res.json(result);
+      issueAuthCookies(res, result.token, result.refreshToken);
+
+      return res.json({
+        user: result.user,
+        csrfRequired: true,
+      });
     } catch (err: any) {
       if (err.name === 'ZodError') return next(err);
 
@@ -160,13 +166,20 @@ export class AuthController {
 
   static async refresh(req: Request, res: Response, next: NextFunction) {
     try {
-      const { refreshToken } = req.body;
+      if (!hasValidCsrfToken(req)) {
+        logger.warn({ ip: req.ip }, 'CSRF Protection: refresh request rejected.');
+        return res.status(403).json({ error: 'Từ chối truy cập: CSRF token không hợp lệ.' });
+      }
+
+      const cookies = getAuthCookies(req);
+      const refreshToken = req.body?.refreshToken || getRefreshTokenCookie(cookies);
       if (!refreshToken) return res.status(400).json({ error: "Refresh token required" });
 
       const useCase = new RefreshTokenUseCase();
       const result = await useCase.execute({ refreshToken });
+      issueAuthCookies(res, result.token, result.refreshToken);
 
-      return res.json(result);
+      return res.json({ refreshed: true });
     } catch (err: any) {
       if (err.message === 'INVALID_REFRESH_TOKEN' || err.message === 'SESSION_EXPIRED') {
         const msg = err.message === 'INVALID_REFRESH_TOKEN' ? "Invalid refresh token or revoked" : "Phiên đăng nhập đã hết hạn hoặc bị thu hồi.";
@@ -178,7 +191,13 @@ export class AuthController {
   }
 
   static async logout(req: Request, res: Response, _next: NextFunction) {
-    const { refreshToken } = req.body;
+    if (!hasValidCsrfToken(req)) {
+      logger.warn({ ip: req.ip }, 'CSRF Protection: logout request rejected.');
+      return res.status(403).json({ error: 'Từ chối truy cập: CSRF token không hợp lệ.' });
+    }
+
+    const cookies = getAuthCookies(req);
+    const refreshToken = req.body?.refreshToken || getRefreshTokenCookie(cookies);
     
     try {
       const ctx = RequestContextResolver.resolve(req);
@@ -200,7 +219,7 @@ export class AuthController {
     if (refreshToken) {
       await redisClient.del(`refresh_token:${refreshToken}`);
     }
+    clearAuthCookies(res);
     return res.json({ success: true });
   }
 }
-

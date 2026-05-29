@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import L, { type LatLngTuple } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { MapPin, CheckCircle2, Loader2, Navigation, Play, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Checkpoint, CheckItem, CheckItemType } from '../../../server/domain/entities';
@@ -6,9 +8,6 @@ import { SCMDButton } from '../../common/interfaces/components/SCMDButton';
 import { SCMDCard } from '../../common/interfaces/components/SCMDCard';
 import { cn } from '../../../lib/utils';
 import { getAuthHeaders } from '../../common/utils/auth';
-
-// Declare Leaflet
-declare const L: any;
 
 export const AdminBenchmarkRecorder: React.FC = () => {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
@@ -60,7 +59,7 @@ export const AdminBenchmarkRecorder: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (showMap && mapContainerRef.current && typeof L !== 'undefined') {
+    if (showMap && mapContainerRef.current) {
       if (!mapInstanceRef.current) {
         mapInstanceRef.current = L.map(mapContainerRef.current, {
           zoomControl: false,
@@ -82,7 +81,7 @@ export const AdminBenchmarkRecorder: React.FC = () => {
       // For simplicity in the recorder, we'll focus on the active one but show others as small dots
       
       if (Array.isArray(checkpoints) && checkpoints.length > 1) {
-        const latlngs = checkpoints
+        const latlngs: LatLngTuple[] = checkpoints
           .filter(c => c.latitude && c.longitude)
           .map(c => [c.latitude, c.longitude]);
         

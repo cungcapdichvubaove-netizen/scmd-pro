@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { logger } from '../../logger/index.js';
 import { redisClient } from '../../redis.js';
 import { CacheManager } from '../../cache/manager.js';
-import { AuthService } from '../../../modules/auth/auth.service.js';
+import { AuthService, type AuthPayload, type AuthTokenSource } from '../../../modules/auth/auth.service.js';
 import { TenantRepository } from '../../../modules/tenant/tenant.repository.js';
 import { StaffRepository } from '../../../modules/staff/staff.repository.js';
 import { AuditService } from '../../audit/audit.service.js';
@@ -14,8 +14,11 @@ import { loginSchema } from '../../../modules/auth/auth.schema.js';
 import { 
   UnauthorizedError, 
   BadRequestError, 
-  ForbiddenError 
+  ForbiddenError,
+  InternalServerError,
+  ServiceUnavailableError
 } from '../../errors/domain.error.js';
+import { UserRole } from '../../architecture/types.js';
 
 const MAX_LOGIN_ATTEMPTS_PER_IP = 20;
 const MAX_LOGIN_ATTEMPTS_PER_USER = 5;
@@ -39,11 +42,38 @@ export interface LoginResponse {
   user: {
     id: string;
     username: string;
-    role: string;
+    role: AuthPayload['role'];
     tenantId: string;
     name: string;
+    staffId?: string | null;
     permissions: string[];
+    assignedVendorId?: string | null;
+    assignedSiteId?: string | null;
+    assignedContractId?: string | null;
   };
+}
+
+interface AuthenticatedStaff extends AuthTokenSource {
+  password: string;
+  status: string;
+  staffId?: string | null;
+}
+
+function isUserRole(value: unknown): value is UserRole {
+  return typeof value === 'string' && Object.values(UserRole).includes(value as UserRole);
+}
+
+function isAuthenticatedStaff(value: unknown): value is AuthenticatedStaff {
+  if (!value || typeof value !== 'object') return false;
+  const user = value as Partial<AuthenticatedStaff>;
+  return typeof user.id === 'string'
+    && typeof user.username === 'string'
+    && typeof user.password === 'string'
+    && typeof user.tenantId === 'string'
+    && typeof user.fullName === 'string'
+    && typeof user.tokenVersion === 'number'
+    && typeof user.status === 'string'
+    && isUserRole(user.role);
 }
 
 export class LoginUseCase {
@@ -87,34 +117,40 @@ export class LoginUseCase {
     const { ipKey, userKey } = await this.checkBruteForce(tenantCode, username, ip);
 
     // 4. Authenticate User
-    let user: any = null;
+    let user: AuthenticatedStaff | null = null;
     try {
       if (isSystemLogin) {
         // Super-admin login: chỉ lookup global, không cần tenant scope
         const superAdminCandidate = await StaffRepository.getByUsername(username, ip);
-        if (superAdminCandidate && superAdminCandidate.role === 'super-admin') {
+        if (superAdminCandidate && superAdminCandidate.role === UserRole.SUPER_ADMIN && isAuthenticatedStaff(superAdminCandidate)) {
           user = superAdminCandidate;
         }
         // Nếu không tìm thấy super-admin, để user = null → fail với Unauthorized
       } else if (resolvedTenantId) {
         // Standard tenant login: thử global lookup trước (super-admin có thể login ở bất kỳ workspace nào)
         const superAdminCandidate = await StaffRepository.getByUsername(username, ip);
-        if (superAdminCandidate && superAdminCandidate.role === 'super-admin') {
+        if (superAdminCandidate && superAdminCandidate.role === UserRole.SUPER_ADMIN && isAuthenticatedStaff(superAdminCandidate)) {
           user = superAdminCandidate;
         } else {
           // Scoped tenant login
-          user = await StaffRepository.getByUsernameAndTenant(username, resolvedTenantId);
+          const tenantScopedCandidate = await StaffRepository.getByUsernameAndTenant(username, resolvedTenantId);
+          user = isAuthenticatedStaff(tenantScopedCandidate) ? tenantScopedCandidate : null;
         }
       } else {
         throw new BadRequestError('Mã doanh nghiệp (Tenant Code) là bắt buộc cho tài khoản này.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof BadRequestError) throw err;
-      logger.error({ err: err.message, username }, 'Database error during user lookup');
-      throw new Error('Hệ thống đang gặp sự cố, vui lòng thử lại sau.');
+      logger.error({ err: err instanceof Error ? err.message : err, username }, 'Database error during user lookup');
+      throw new InternalServerError('Hệ thống đang gặp sự cố, vui lòng thử lại sau.');
     }
 
-    const isAuthenticated = user && (await bcrypt.compare(password, user.password));
+    if (!isAuthenticatedStaff(user)) {
+      await this.recordFailedAttempt(ipKey, userKey, username, resolvedTenantId || 'system', ip, userAgent);
+      throw new UnauthorizedError('Tài khoản hoặc mật khẩu không chính xác.');
+    }
+
+    const isAuthenticated = await bcrypt.compare(password, user.password);
 
     if (!isAuthenticated) {
       await this.recordFailedAttempt(ipKey, userKey, username, resolvedTenantId || 'system', ip, userAgent);
@@ -134,11 +170,17 @@ export class LoginUseCase {
     const { token, refreshToken, payload } = AuthService.generateAuthPayload(user, permissions);
 
     // Store refresh token with 7-day TTL
-    await redisClient.setex(
-      `refresh_token:${refreshToken}`, 
-      7 * 24 * 60 * 60, 
-      JSON.stringify(payload)
-    );
+    // Wrap in try-catch: nếu Redis fail ở đây, user đã được xác thực thành công.
+    // Không nên trả 500 chỉ vì không lưu được refresh token — access token vẫn hoạt động.
+    try {
+      await redisClient.setex(
+        `refresh_token:${refreshToken}`, 
+        7 * 24 * 60 * 60, 
+        JSON.stringify(payload)
+      );
+    } catch (redisErr: unknown) {
+      logger.error({ err: redisErr instanceof Error ? redisErr.message : redisErr, userId: user.id }, 'Failed to store refresh token in Redis. Login continues with access token only.');
+    }
 
     return {
       token,
@@ -149,7 +191,11 @@ export class LoginUseCase {
         role: user.role,
         tenantId: user.tenantId,
         name: user.fullName || user.username,
-        permissions
+        staffId: user.staffId ?? null,
+        permissions,
+        assignedVendorId: user.assignedVendorId ?? null,
+        assignedSiteId: user.assignedSiteId ?? null,
+        assignedContractId: user.assignedContractId ?? null,
       }
     };
   }
@@ -176,19 +222,21 @@ export class LoginUseCase {
           }, 'ReCAPTCHA verification failed.');
           throw new UnauthorizedError('Xác thực reCAPTCHA không hợp lệ.');
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (error instanceof UnauthorizedError) throw error;
 
-        metrics.incrementCounter('recaptcha_failure', { 
-          action: 'login', 
-          reason: error.code || 'service_error' 
+        const errorCode = error instanceof Error && 'code' in error ? String((error as Error & { code?: string }).code || 'service_error') : 'service_error';
+        metrics.incrementCounter('recaptcha_failure', {
+          action: 'login',
+          reason: errorCode
         });
 
-        logger.warn({ 
-          err: error.message,
+        logger.error({
+          err: error instanceof Error ? error.message : error,
           category: 'SECURITY',
           alert_type: 'RECAPTCHA_UNAVAILABLE'
-        }, 'ReCAPTCHA service unreachable. Bypassing check (Fail-Open) to maintain service availability.');
+        }, 'ReCAPTCHA service unreachable. Login denied by fail-closed policy.');
+        throw new ServiceUnavailableError('Không thể xác thực reCAPTCHA, vui lòng thử lại sau.');
       }
     }
   }
@@ -210,10 +258,10 @@ export class LoginUseCase {
       if (!tenant) throw new BadRequestError('Mã doanh nghiệp không tồn tại.');
       if (tenant.status !== 'active') throw new ForbiddenError('Doanh nghiệp của bạn đang bị tạm ngưng dịch vụ.');
       return tenant.id;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof BadRequestError || err instanceof ForbiddenError) throw err;
-      logger.warn({ err: err.message, tenantCode }, 'Tenant resolution error');
-      throw new Error('Dịch vụ đang bận, vui lòng thử lại sau.');
+      logger.warn({ err: err instanceof Error ? err.message : err, tenantCode }, 'Tenant resolution error');
+      throw new InternalServerError('Dịch vụ đang bận, vui lòng thử lại sau.');
     }
   }
 
@@ -229,7 +277,7 @@ export class LoginUseCase {
     if ((ipAttempts && parseInt(ipAttempts) >= MAX_LOGIN_ATTEMPTS_PER_IP) ||
         (userAttempts && parseInt(userAttempts) >= MAX_LOGIN_ATTEMPTS_PER_USER)) {
       logger.error({ ip, username, tenantCode }, 'Brute-force limit reached during login attempt');
-      throw new ForbiddenError('Bạn đã thử quá nhiều lần. Vui lòng quay lại sau 15 phút.');
+      throw new Error('TOO_MANY_ATTEMPTS');
     }
 
     return { ipKey, userKey };
@@ -253,7 +301,7 @@ export class LoginUseCase {
     });
   }
 
-  private async handleSuccessfulLogin(user: any, ipKey: string, userKey: string, ip: string, userAgent: string) {
+  private async handleSuccessfulLogin(user: AuthenticatedStaff, ipKey: string, userKey: string, ip: string, userAgent: string) {
     await Promise.all([
       redisClient.del(ipKey),
       redisClient.del(userKey),
@@ -261,7 +309,10 @@ export class LoginUseCase {
         tokenVersion: user.tokenVersion,
         status: user.status,
         role: user.role,
-        tenantStatus: 'active'
+        tenantStatus: 'active',
+        assignedVendorId: user.assignedVendorId ?? null,
+        assignedSiteId: user.assignedSiteId ?? null,
+        assignedContractId: user.assignedContractId ?? null,
       }, 60), // TTL reduced to 60s as per SCMD Pro v4.38.4 requirements
       CacheManager.set(`tenant:status:${user.tenantId}`, 'active', 3600)
     ]);
@@ -277,4 +328,3 @@ export class LoginUseCase {
     });
   }
 }
-

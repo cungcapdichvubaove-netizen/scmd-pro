@@ -1,8 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import { AsyncLocalStorage } from 'async_hooks';
 import { logger } from '../logger/index.js';
 import { metrics } from '../metrics.js';
+
+// FIX: AsyncLocalStorage để truyền SYSTEM bypass context vào isolationGuard
+// thay vì tx.$extends() (không hoạt động trên Prisma transaction client)
+const systemBypassContext = new AsyncLocalStorage<boolean>();
 
 const { Pool } = pg;
 
@@ -78,11 +83,13 @@ export function getPoolStats() {
   };
 }
 
-// Periodically sync pool metrics to prometheus registry
-setInterval(() => {
+// Periodically sync pool metrics to prometheus registry.
+// `unref()` keeps long-running services observable without pinning one-off scripts.
+const poolMetricsInterval = setInterval(() => {
   const stats = getPoolStats();
   metrics.updateDBPool(stats.idle, stats.active);
 }, 15000);
+poolMetricsInterval.unref();
 
 const adapter = new PrismaPg(pool);
 
@@ -181,7 +188,8 @@ function createIsolationGuard(baseClient: any) {
 
           if (isTenantScopedModel(model)) {
             const isRead = ['findMany', 'findFirst', 'findUnique', 'count', 'groupBy', 'aggregate'].includes(operation);
-            const isBypass = args?.bypassIsolation_SYSTEM_ONLY === true;
+            // FIX: Đọc bypass context từ AsyncLocalStorage thay vì tx.$extends() (không hoạt động trong transaction)
+            const isBypass = systemBypassContext.getStore() === true || args?.bypassIsolation_SYSTEM_ONLY === true;
 
             if (isBypass) {
               const injectedTenantId = args.where?.tenantId || args.where?.tenant_id;
@@ -233,6 +241,7 @@ const DB_PROBE_INTERVAL = 30000;
 function checkCircuitBreaker() {
   if (!databaseUnreachable) return false;
   if (isProduction) return false; // NEVER fallback to mock in production
+  if (process.env.STRICT_DB_TEST === 'true') return false;
   
   const now = Date.now();
   if (now - lastDbProbeTime > DB_PROBE_INTERVAL) {
@@ -258,6 +267,7 @@ async function probeDatabase() {
 
 function handleDbFailover(err: any): boolean {
   if (isProduction) return false; // NEVER fallback to mock in production
+  if (process.env.STRICT_DB_TEST === 'true') return false;
   const isConnError = 
     err?.code === 'P1001' || 
     err?.code === 'P2010' ||
@@ -293,9 +303,14 @@ const TENANT_SCOPED_MODELS = [
   'PatrolLog',
   'EventOutbox',
   'Incident',
+  'IncidentTimeline',
+  'IncidentEvidence',
+  'IncidentSlaRule',
   'AttendanceRecord',
   'Notification',
   'Vendor',
+  'Site',
+  'GuardPost',
   'Contract',
   'ComplianceScore',
   'Audit',
@@ -308,10 +323,27 @@ const TENANT_SCOPED_MODELS = [
   'Feedback',
   'AuditLog',
   'PatrolBenchmarkDeviation',
+  'PatrolRoute',
+  'PatrolRouteCheckpoint',
+  'PatrolAssignment',
+  'ShiftSession',
+  'PatrolSession',
+  'ViolationEvent',
   'Attachment',
   'Image',
   'TenantUsageEvent',
-  'CheckpointBenchmarkSession'
+  'CheckpointBenchmarkSession',
+  'VendorScorecard',
+  'MonthlyAcceptanceReport',
+  'PenaltyItem',
+  'ViolationDispute',
+  'ContractPenaltyRule',
+  'ContractVersion',
+  'ContractLineItem',
+  'ContractChecklistRequirement',
+  'ContractShiftRequirement',
+  'ContractStaffStandard',
+  'ShiftAssignment'
 ];
 
 function isTenantScopedModel(model: string) {
@@ -458,10 +490,20 @@ export const db = {
     return options?.readOnly ? isolationReadGuard : isolationGuard; 
   },
   /**
-   * V3.8.7: Provides a client that explicitly authorizes cross-tenant lookups.
-   * MUST only be used for system-level operations (reputation check, global search).
+   * Provides a client that explicitly authorizes cross-tenant lookups.
+   * MUST only be used by allowlisted repositories with a reason and caller.
    */
-  systemBypass(options?: { readOnly?: boolean }) {
+  systemBypass(options: { readOnly?: boolean; reason: string; caller: string }) {
+    if (!options?.reason || !options?.caller) {
+      throw new Error('SECURITY_CRITICAL: systemBypass requires reason and caller');
+    }
+    logger.warn({
+      reason: options.reason,
+      caller: options.caller,
+      readOnly: options.readOnly === true,
+      category: 'SECURITY',
+      event: 'SYSTEM_BYPASS_USED'
+    }, 'System bypass client requested.');
     const baseGuard = options?.readOnly ? isolationReadGuard : isolationGuard;
     return baseGuard.$extends({
       query: {
@@ -512,7 +554,9 @@ export const db = {
           // Thiếu dòng này → current_setting('app.current_tenant_id', true) = '' → RLS block mọi query
           // kể cả seed.ts (upsert tenant/staff) và StaffRepository.getByUsername ($queryRaw super-admin lookup).
           await tx.$executeRaw`SELECT set_config('app.current_tenant_id', 'SYSTEM', true)`;
-          return await operation(tx as any);
+          // FIX [SYSTEM-BYPASS]: Thay tx.$extends() (không hoạt động trong Prisma transaction)
+          // bằng AsyncLocalStorage.run() để inject SYSTEM bypass context cho isolationGuard.
+          return await systemBypassContext.run(true, () => operation(tx as any));
         }
 
         // BẮT BUỘC [RLS]: Thiết lập RLS session variable cho PostgreSQL (Bảo vệ dữ liệu chéo tenant)

@@ -328,7 +328,7 @@ export const StaffPerformancePortfolio: React.FC<{ staffId: string; staffName: s
                             referrerPolicy="no-referrer"
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
-                              target.src = "https://images.unsplash.com/photo-1557683311-eac922347aa1?q=80&w=100&h=100&auto=format&fit=crop";
+                              target.style.display = 'none';
                               target.onerror = null;
                             }}
                           />

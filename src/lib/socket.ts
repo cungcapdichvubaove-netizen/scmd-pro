@@ -1,12 +1,22 @@
-import io from "socket.io-client";
+type SocketModule = typeof import('socket.io-client');
+type SocketInstance = ReturnType<SocketModule['default']>;
 
-// Singleton instance
-let socketInstance: any = null;
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
-/**
- * getSocket: Phục vụ mô hình Real-time với Auth Handshake và Tenant Isolation.
- * Đảm bảo socket luôn được cập nhật token mới nhất để vượt qua middleware bảo mật của Backend.
- */
+const getSocketUrl = () => trimTrailingSlash(import.meta.env.VITE_SOCKET_URL || window.location.origin);
+const getSocketPath = () => import.meta.env.VITE_SOCKET_PATH || '/socket.io';
+
+let socketInstance: SocketInstance | null = null;
+let socketModulePromise: Promise<SocketModule> | null = null;
+
+const loadSocketModule = async (): Promise<SocketModule> => {
+  if (!socketModulePromise) {
+    socketModulePromise = import('socket.io-client');
+  }
+
+  return socketModulePromise;
+};
+
 export const resetSocket = () => {
   if (socketInstance) {
     socketInstance.disconnect();
@@ -14,34 +24,22 @@ export const resetSocket = () => {
   }
 };
 
-export const getSocket = (token?: string | null): any => {
+export const getSocket = async (_token?: string | null): Promise<SocketInstance> => {
   if (socketInstance) {
-    if (token) {
-      socketInstance.auth = { token };
-    }
     return socketInstance;
   }
 
-  const savedToken = typeof window !== 'undefined' ? localStorage.getItem('scmd_jwt') : null;
-  const currentToken = token || savedToken;
+  const { default: io } = await loadSocketModule();
 
-  socketInstance = io(window.location.origin, {
-    // FIX: Không thay đổi target — vẫn dùng window.location.origin.
-    // Trong dev: Vite proxy '/socket.io' → http://localhost:5000 (với ws: true).
-    // Trong production: Nginx proxy '/socket.io' → app:3000.
-    // socket.io-client sẽ kết nối đúng trong cả hai môi trường.
-    autoConnect: !!currentToken, // Chỉ tự động kết nối nếu có token (Realtime Auth)
-    auth: {
-      token: currentToken
-    },
+  socketInstance = io(getSocketUrl(), {
+    path: getSocketPath(),
+    autoConnect: false,
+    withCredentials: true,
     reconnection: true,
     reconnectionAttempts: 5,
-    reconnectionDelay: 1000
+    reconnectionDelay: 1000,
+    transports: ['websocket', 'polling']
   });
 
   return socketInstance;
 };
-
-// Default export
-const socket = getSocket();
-export default socket;

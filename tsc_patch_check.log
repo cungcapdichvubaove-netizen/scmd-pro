@@ -1,0 +1,53 @@
+src/apps/common/interfaces/components/DashboardUI.tsx(1,19): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/common/interfaces/components/DashboardUI.tsx(2,40): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/common/interfaces/components/DashboardUI.tsx(3,24): error TS2307: Cannot find module 'motion/react' or its corresponding type declarations.
+src/apps/common/interfaces/components/DashboardUI.tsx(58,7): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/common/interfaces/components/SCMDButton.tsx(1,19): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/common/interfaces/components/SCMDButton.tsx(34,7): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/common/interfaces/components/SCMDCard.tsx(1,19): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/common/interfaces/components/SCMDCard.tsx(11,7): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/common/interfaces/components/SCMDInput.tsx(1,19): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/common/interfaces/components/SCMDInput.tsx(12,7): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/AuditTab.tsx(1,44): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/AuditTab.tsx(2,24): error TS2307: Cannot find module 'motion/react' or its corresponding type declarations.
+src/apps/security/interfaces/AuditTab.tsx(3,64): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/AuditTab.tsx(75,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/MarketGrowthTab.tsx(1,53): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/MarketGrowthTab.tsx(2,72): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/MarketGrowthTab.tsx(45,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/SettingsTab.tsx(1,37): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/SettingsTab.tsx(2,24): error TS2307: Cannot find module 'motion/react' or its corresponding type declarations.
+src/apps/security/interfaces/SettingsTab.tsx(12,8): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/SettingsTab.tsx(112,12): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/TasksTab.tsx(1,53): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/TasksTab.tsx(2,24): error TS2307: Cannot find module 'motion/react' or its corresponding type declarations.
+src/apps/security/interfaces/TasksTab.tsx(3,55): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/TasksTab.tsx(41,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/UsageAnalyticsTab.tsx(1,53): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/UsageAnalyticsTab.tsx(2,79): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/UsageAnalyticsTab.tsx(46,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/components/OperationsTables.tsx(1,53): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/components/OperationsTables.tsx(2,46): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/components/OperationsTables.tsx(3,28): error TS2307: Cannot find module 'zustand/react/shallow' or its corresponding type declarations.
+src/apps/security/interfaces/components/OperationsTables.tsx(55,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/components/OpsTableSystem.tsx(1,53): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/components/OpsTableSystem.tsx(2,30): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/components/OpsTableSystem.tsx(68,3): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/interfaces/components/SurpriseAudit.tsx(1,44): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/security/interfaces/components/SurpriseAudit.tsx(13,8): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/security/interfaces/components/SurpriseAudit.tsx(14,24): error TS2307: Cannot find module 'motion/react' or its corresponding type declarations.
+src/apps/security/interfaces/components/SurpriseAudit.tsx(177,7): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/security/store/useDashboardStore.ts(1,24): error TS2307: Cannot find module 'zustand' or its corresponding type declarations.
+src/apps/superadmin/interfaces/components/EmptyState.tsx(1,19): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/superadmin/interfaces/components/EmptyState.tsx(19,3): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/apps/tasks/TaskManager.tsx(1,44): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/tasks/TaskManager.tsx(18,8): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/apps/tasks/TaskManager.tsx(20,25): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/apps/tasks/TaskManager.tsx(21,41): error TS2307: Cannot find module 'motion/react' or its corresponding type declarations.
+src/apps/tasks/TaskManager.tsx(205,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/lib/api.ts(6,69): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+src/lib/toast.tsx(1,53): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/lib/toast.tsx(2,54): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/lib/toast.tsx(70,12): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+src/lib/utils.ts(1,39): error TS2307: Cannot find module 'clsx' or its corresponding type declarations.
+src/lib/utils.ts(2,25): error TS2307: Cannot find module 'tailwind-merge' or its corresponding type declarations.

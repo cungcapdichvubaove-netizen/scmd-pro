@@ -9,6 +9,17 @@ export interface DashboardTenantInfo {
   subscriptionPlan?: string;
   maxGuards?: number;
   hasPendingUpgrade?: boolean;
+  resolvedFeatures?: Record<string, boolean>;
+  featureAvailability?: {
+    ai_contract_scan?: {
+      feature: 'ai_contract_scan';
+      enabledByPlan: boolean;
+      blockedByGovernance: boolean;
+      runtimeEnabled: boolean;
+      status: 'ENABLED' | 'BLOCKED_BY_GOVERNANCE' | 'DISABLED_BY_PLAN';
+      reason: string | null;
+    };
+  };
 }
 
 export interface ActiveSOS {
@@ -61,12 +72,14 @@ interface DashboardState {
     activeCheckpoint: any | null;
     isOffline: boolean;
     pendingCount: number;
+    failedSyncCount: number;
     lastCheckpointTime: number;
   };
   setPatrolLocation: (loc: { lat: number; lon: number } | null) => void;
   setActiveCheckpoint: (cp: any | null) => void;
   setPatrolOfflineStatus: (v: boolean) => void;
   setPatrolPendingCount: (n: number) => void;
+  setPatrolFailedSyncCount: (n: number) => void;
   setPatrolTimes: (times: Partial<{ lastCheckpointTime: number }>) => void;
 
   trustScore: {
@@ -123,15 +136,17 @@ export const useDashboardStore = create<DashboardState>((set) => ({
     activeCheckpoint: null,
     isOffline: !navigator.onLine,
     pendingCount: 0,
+    failedSyncCount: 0,
     lastCheckpointTime: Date.now(),
   },
   setPatrolLocation: (loc) => set((s) => ({ patrolState: { ...s.patrolState, currentLocation: loc } })),
   setActiveCheckpoint: (cp) => set((s) => ({ patrolState: { ...s.patrolState, activeCheckpoint: cp } })),
   setPatrolOfflineStatus: (v) => set((s) => ({ patrolState: { ...s.patrolState, isOffline: v } })),
   setPatrolPendingCount: (n) => set((s) => ({ patrolState: { ...s.patrolState, pendingCount: n } })),
+  setPatrolFailedSyncCount: (n) => set((s) => ({ patrolState: { ...s.patrolState, failedSyncCount: n } })),
   setPatrolTimes: (times) => set((s) => ({ patrolState: { ...s.patrolState, ...times } })),
 
-  trustScore: { averageScore: 100, status: 'EXCELLENT' },
+  trustScore: { averageScore: 0, status: 'NO_DATA', trend: [] },
   setTrustScore: (score) => set({ trustScore: score }),
 
   onlineUserIds: [],

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { StorageProvider, UploadResult, PresignedUploadResult } from '../storage-provider.js';
 import { logger } from '../../logger/index.js';
@@ -58,6 +58,34 @@ export class S3Provider implements StorageProvider {
     }
   }
 
+  async download(publicId: string): Promise<Buffer> {
+    try {
+      const response = await this.client.send(new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: publicId,
+      }));
+
+      const body = response.Body;
+      if (!body) {
+        throw new Error('S3 object body is empty');
+      }
+
+      if (typeof (body as any).transformToByteArray === 'function') {
+        const bytes = await (body as any).transformToByteArray();
+        return Buffer.from(bytes);
+      }
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of body as AsyncIterable<Uint8Array | Buffer | string>) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks);
+    } catch (error) {
+      logger.error({ error, publicId }, 'S3 download failed');
+      throw error;
+    }
+  }
+
   async delete(publicId: string): Promise<void> {
     try {
       await this.client.send(new DeleteObjectCommand({
@@ -66,6 +94,23 @@ export class S3Provider implements StorageProvider {
       }));
     } catch (error) {
       logger.error({ error, publicId }, 'S3 delete failed');
+      throw error;
+    }
+  }
+
+  async changeStorageClass(publicId: string, storageClass: 'STANDARD' | 'COLD'): Promise<void> {
+    const targetStorageClass = storageClass === 'COLD' ? 'DEEP_ARCHIVE' : 'STANDARD';
+
+    try {
+      await this.client.send(new CopyObjectCommand({
+        Bucket: this.bucketName,
+        Key: publicId,
+        CopySource: `${this.bucketName}/${publicId}`,
+        StorageClass: targetStorageClass,
+        MetadataDirective: 'COPY',
+      }));
+    } catch (error) {
+      logger.error({ error, publicId, storageClass }, 'S3 change storage class failed');
       throw error;
     }
   }

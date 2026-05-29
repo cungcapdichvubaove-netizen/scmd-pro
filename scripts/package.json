@@ -1,0 +1,13 @@
+{
+  "name": "scmd-pdf-service",
+  "version": "1.0.0",
+  "description": "Minimal PDF generation service — chỉ cần express + puppeteer",
+  "type": "module",
+  "dependencies": {
+    "express": "4.22.1",
+    "puppeteer": "24.42.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

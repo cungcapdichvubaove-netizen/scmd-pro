@@ -9,7 +9,7 @@
 | Key | Purpose | Required in Prod |
 | :--- | :--- | :--- |
 | `JWT_SECRET` | Signing Access Tokens | YES (Server crashes if missing) |
-| `RECAPTCHA_SECRET_KEY` | Bot protection | YES (Fail-open implemented) |
+| `RECAPTCHA_SECRET_KEY` | Bot protection | YES (Fail-closed when verification is unavailable) |
 | `DATABASE_URL` | Prisma connection | YES |
 
 *Strict adherence to .cursorrules is required for all new feature branches.*

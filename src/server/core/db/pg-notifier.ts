@@ -12,6 +12,7 @@ import { db } from './prisma.js';
 export class PGNotifier {
   private static client: pg.Client;
   private static attempt: number = 0;
+  private static reconnectTimer: NodeJS.Timeout | null = null;
 
   static async init() {
     const dbUrl = process.env.DATABASE_URL;
@@ -110,13 +111,29 @@ export class PGNotifier {
   }
 
   private static reconnect() {
+    if (this.reconnectTimer) return;
+
     this.attempt++;
-    const delay = Math.min(this.attempt * 1000 + Math.random() * 500, 30000);
+    const baseDelayMs = 1000;
+    const maxDelayMs = 30000;
+    const cappedExponentialDelay = Math.min(baseDelayMs * 2 ** Math.min(this.attempt - 1, 5), maxDelayMs);
+    const delay = Math.floor(Math.random() * cappedExponentialDelay);
     logger.info({ attempt: this.attempt, delay }, 'Scheduled PG Notifier reconnection');
-    setTimeout(() => this.init(), delay);
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      try {
+        await this.client?.end().catch(() => undefined);
+      } finally {
+        await this.init();
+      }
+    }, delay);
   }
 
   static async cleanup() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.client) {
       await this.client.end();
     }

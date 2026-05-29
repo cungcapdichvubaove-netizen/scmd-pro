@@ -46,17 +46,31 @@ Thumbs.db
 logs
 error.log
 
-# Documentation (không cần trong runtime image)
-docs
+# Markdown docs — loại trừ toàn bộ nhưng giữ lại docs/ (cần serve qua GET /docs/:filename)
+# [FIX C-01]: Bỏ `docs` khỏi exclusion list. docs/ bị exclude khiến COPY docs ./docs
+# trong Dockerfile.desktop luôn fail với "/docs: not found", dù folder tồn tại trên host.
+# *.md vẫn exclude các file .md rải rác ngoài project root, nhưng !docs/ re-include toàn bộ docs/
 *.md
 !README.md
+!docs/
+!docs/**
 
 # CI/CD
 .github
 .gitlab-ci.yml
 
+# Windows scripts & SQL dumps (không cần trong image)
+*.bat
+*.ps1
+*.sql
+!init-db.sql
+!prisma/**/*.sql
+patch_output
+patch_v4.mjs
+check_db.ts
+staff.repository.ts
+
 # Temporary files
 tmp
 temp
 .tmp
-

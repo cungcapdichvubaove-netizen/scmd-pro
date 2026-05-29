@@ -7,7 +7,7 @@ export class ListStaffUseCase extends BaseUseCase<{ cursor?: string; limit?: num
   protected async authorize(context: SecurityContext): Promise<void> {
     // Permission: staff:read (mapped in permissions.ts, normally handled by middleware)
     // But for defense-in-depth, we check role here too
-    const allowedRoles = [UserRole.TENANT_ADMIN, UserRole.SUPERVISOR, UserRole.SUPER_ADMIN];
+    const allowedRoles = [UserRole.TENANT_ADMIN, UserRole.SUPERVISOR, UserRole.SUPER_ADMIN, UserRole.VENDOR_COMMANDER, UserRole.VENDOR_REPRESENTATIVE];
     if (!allowedRoles.includes(context.role as UserRole)) {
       throw new Error('FORBIDDEN_ACCESS');
     }

@@ -2,17 +2,32 @@ import { db } from '../../core/db/prisma.js';
 import bcrypt from 'bcryptjs';
 import { logger } from '../../core/logger/index.js';
 import { CacheManager } from '../../core/cache/manager.js';
-import { Staff, createStaffSchema } from './staff.schema.js';
+import { Staff, staffSchema } from './staff.schema.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import { AuditService } from '../../core/audit/audit.service.js';
 import { SecurityContext, UserRole } from '../../core/architecture/types.js';
 import { StaffEntity } from './domain/staff.entity.js';
+import { isVendorScopedRole, requireVendorActorScope } from '../../shared/security/vendor-actor-scope.js';
 
 import { canonicalStringify } from '../../core/utils/normalization.js';
 
 export class StaffRepository {
   private static readonly PROFILE_TTL = 3600; // 1 hour
   private static readonly LIST_TTL = 300; // 5 minutes
+
+  private static getStaffScopeWhere(ctx: SecurityContext): Record<string, string> {
+    if (!isVendorScopedRole(ctx.role)) {
+      return {};
+    }
+
+    requireVendorActorScope(ctx);
+
+    return {
+      assignedVendorId: ctx.assignedVendorId!,
+      ...(ctx.assignedSiteId ? { assignedSiteId: ctx.assignedSiteId } : {}),
+      ...(ctx.assignedContractId ? { assignedContractId: ctx.assignedContractId } : {}),
+    };
+  }
 
   private static getCacheKey(id: string) {
     return `staff:profile:${id}`;
@@ -32,12 +47,14 @@ export class StaffRepository {
    */
   static async getAllByTenant(ctx: SecurityContext, cursor?: string, limit: number = 20, filters?: { role?: string; status?: string; search?: string; view?: string }): Promise<{ data: Omit<Staff, 'password'>[], nextCursor: string | null }> {
     const isGuard = ctx.role === UserRole.GUARD;
+    const isVendorScoped = isVendorScopedRole(ctx.role);
     const filterKey = this.normalizeFilters(filters);
     const pageKey = (cursor || 'first') + ':' + filterKey;
     const cacheKey = this.getListCacheKey(ctx.tenantId, pageKey);
 
     return await CacheManager.wrap(cacheKey, async () => {
       const where: any = {};
+      if (isVendorScoped) Object.assign(where, this.getStaffScopeWhere(ctx));
       
       if (filters?.role && filters.role !== 'all') {
         where.role = filters.role;
@@ -51,6 +68,7 @@ export class StaffRepository {
         const s = filters.search.trim();
         const searchConditions: any[] = [
           { fullName: { contains: s, mode: 'insensitive' } },
+          { staffId: { contains: s, mode: 'insensitive' } },
           { username: { contains: s, mode: 'insensitive' } },
           { email: { contains: s, mode: 'insensitive' } },
           { phone: { contains: s } } // Phone is numeric, doesn't need insensitive
@@ -73,9 +91,13 @@ export class StaffRepository {
         orderBy: [{ id: 'asc' }], // Cursor pagination needs stable ordering, usually ID
         select: {
           id: true,
+          staffId: true,
           fullName: true,
           role: true,
           status: true,
+          assignedVendorId: true,
+          assignedSiteId: true,
+          assignedContractId: true,
           // Only fetch extra fields if NOT mobile view
           ...(isMobileView ? {} : {
             username: true,
@@ -114,6 +136,10 @@ export class StaffRepository {
 
       // Update Redis cache immediately for instant revocation and profile invalidation
       await CacheManager.del(`auth_metadata:${id}`);
+      // [FIX H-03]: Xóa cả lock key — nếu có concurrent request đang hold lock
+      // (auth_metadata:{id}:lock), nó sẽ ghi lại cache cũ sau khi del trên chạy xong.
+      // Xóa lock buộc request đó phải re-fetch từ DB → nhận tokenVersion mới.
+      await redis.del(`auth_metadata:${id}:lock`);
       await redis.set(`user_token_version:${id}`, staff.tokenVersion.toString(), 'EX', 3600);
       await CacheManager.del(this.getCacheKey(id));
       await CacheManager.delByPattern(`staff:list:${ctx.tenantId}:*`);
@@ -124,18 +150,26 @@ export class StaffRepository {
 
   static async getById(ctx: SecurityContext, id: string): Promise<Omit<Staff, 'password'> | null> {
     const cacheKey = this.getCacheKey(id);
+    const isVendorScoped = isVendorScopedRole(ctx.role);
 
     return await CacheManager.wrap(cacheKey, async () => {
       const isGuard = ctx.role === UserRole.GUARD;
-      return await db.forTenant(ctx.tenantId, { ownerId: isGuard ? ctx.userId : undefined, readOnly: true }).staff.findUnique({
-        where: { id },
+      return await db.forTenant(ctx.tenantId, { ownerId: isGuard ? ctx.userId : undefined, readOnly: true }).staff.findFirst({
+        where: {
+          id,
+          ...(isVendorScoped ? this.getStaffScopeWhere(ctx) : {})
+        },
         select: {
           id: true,
           tenantId: true,
           username: true,
           email: true,
           fullName: true,
+          staffId: true,
           role: true,
+          assignedVendorId: true,
+          assignedSiteId: true,
+          assignedContractId: true,
           status: true,
           phone: true,
           tokenVersion: true,
@@ -155,8 +189,12 @@ export class StaffRepository {
    */
   static async getByIdWithPassword(ctx: SecurityContext, id: string): Promise<Staff | null> {
     const isGuard = ctx.role === UserRole.GUARD;
-    return await db.forTenant(ctx.tenantId, { ownerId: isGuard ? ctx.userId : undefined, readOnly: true }).staff.findUnique({
-      where: { id }
+    const isVendorScoped = isVendorScopedRole(ctx.role);
+    return await db.forTenant(ctx.tenantId, { ownerId: isGuard ? ctx.userId : undefined, readOnly: true }).staff.findFirst({
+      where: {
+        id,
+        ...(isVendorScoped ? this.getStaffScopeWhere(ctx) : {})
+      }
     }) as Staff | null;
   }
 
@@ -167,8 +205,12 @@ export class StaffRepository {
       username: raw.username,
       email: raw.email,
       fullName: raw.fullName,
+      staffId: (raw as any).staffId ?? null,
       phone: raw.phone,
       role: raw.role,
+      assignedVendorId: (raw as any).assignedVendorId ?? null,
+      assignedSiteId: (raw as any).assignedSiteId ?? null,
+      assignedContractId: (raw as any).assignedContractId ?? null,
       status: raw.status,
       password: raw.password,
       qualifications: raw.qualifications,
@@ -182,7 +224,12 @@ export class StaffRepository {
     const isGuard = ctx.role === UserRole.GUARD;
     
     return await db.withTenant(ctx.tenantId, async (tx: any) => {
-      const before = await tx.staff.findUnique({ where: { id: entity.id } });
+      const before = await tx.staff.findFirst({
+        where: {
+          id: entity.id,
+          ...this.getStaffScopeWhere(ctx),
+        }
+      });
       if (!before) {
         const error: any = new Error('NOT_FOUND_OR_ACCESS_DENIED');
         error.status = 404;
@@ -190,20 +237,50 @@ export class StaffRepository {
       }
 
       const props = entity.getProps();
-      const updated = await tx.staff.update({
-        where: { id: entity.id },
-        data: {
-          email: props.email,
-          fullName: props.fullName,
-          phone: props.phone,
-          role: props.role,
-          status: props.status,
-          qualifications: props.qualifications,
-          idNumber: props.idNumber,
-          licenseNumber: props.licenseNumber,
-          idExpiry: props.idExpiry,
-          updatedAt: new Date()
+      const normalizedUsername = typeof props.username === 'string' ? props.username.trim() : '';
+      const normalizedStaffId = typeof props.staffId === 'string'
+        ? (props.staffId.trim() || null)
+        : (props.staffId ?? null);
+
+      const updateData: Record<string, unknown> = {
+        username: normalizedUsername,
+        email: props.email,
+        fullName: props.fullName,
+        staffId: normalizedStaffId,
+        phone: props.phone,
+        role: props.role,
+        assignedVendorId: (props as any).assignedVendorId ?? null,
+        assignedSiteId: (props as any).assignedSiteId ?? null,
+        assignedContractId: (props as any).assignedContractId ?? null,
+        status: props.status,
+        qualifications: props.qualifications,
+        idNumber: props.idNumber,
+        licenseNumber: props.licenseNumber,
+        idExpiry: props.idExpiry,
+        updatedAt: new Date()
+      };
+
+      if (typeof props.password === 'string' && props.password.trim() !== '' && props.password !== before.password) {
+        const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
+        updateData.password = await bcrypt.hash(props.password, rounds);
+      }
+
+      if (normalizedUsername && normalizedUsername !== before.username) {
+        const existingByUsername = await tx.staff.findFirst({
+          where: {
+            username: normalizedUsername,
+            NOT: { id: before.id },
+          },
+          select: { id: true },
+        });
+        if (existingByUsername) {
+          throw new Error('CONFLICT_USERNAME');
         }
+      }
+
+      const updated = await tx.staff.update({
+        where: { id: before.id },
+        data: updateData
       });
 
       // Invalidate Cache for consistency
@@ -235,7 +312,11 @@ export class StaffRepository {
    * Creates a new staff member within a transaction.
    */
   static async create(ctx: SecurityContext, data: any): Promise<Staff> {
-    const validated = createStaffSchema.parse(data);
+    // FIX [TENANT-ID-BUG v2]: Omit tenantId khỏi Zod parse để tránh uuid() reject
+    // ctx.tenantId của SUPER_ADMIN = 'tenant_system' (không phải UUID format).
+    // Repository là internal layer — tenantId phải lấy từ ctx (JWT-trusted), không từ data payload.
+    // Sau parse, override tenantId = ctx.tenantId để đảm bảo RLS integrity khi write vào DB.
+    const validated = staffSchema.omit({ tokenVersion: true, tenantId: true }).parse(data);
     
     // CRITICAL: Hash password before persisting
     if (validated.password) {
@@ -269,14 +350,19 @@ export class StaffRepository {
       // 3. Create staff record
       const staff = await tx.staff.create({
         data: {
-          ...validated
+          ...validated,
+          staffId: validated.staffId?.trim() || null,
+          assignedVendorId: validated.assignedVendorId ?? null,
+          assignedSiteId: validated.assignedSiteId ?? null,
+          assignedContractId: validated.assignedContractId ?? null,
+          tenantId: ctx.tenantId  // FIX: luôn dùng ctx.tenantId (JWT-trusted) thay vì validated.tenantId
         }
       });
 
       // Invalidate list cache
       await CacheManager.delByPattern(`staff:list:${ctx.tenantId}:*`);
 
-      // 3. Dispatch Domain Event (Transactional Outbox)
+      // 4. Dispatch Domain Event (Transactional Outbox)
       await EventBus.dispatch({
         type: 'STAFF_CREATED',
         version: '1.1',
@@ -292,7 +378,7 @@ export class StaffRepository {
   static async update(ctx: SecurityContext, id: string, data: any): Promise<Staff> {
     const isGuard = ctx.role === UserRole.GUARD;
     
-    // FIX 4.5: Password Security - Băm mật khẩu nếu có thay đổi trong Repository update path
+    // FIX 4.5: Password Security - Hash password if changed in Repository update path
     if (data.password) {
       const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
       data.password = await bcrypt.hash(data.password, rounds);
@@ -300,18 +386,26 @@ export class StaffRepository {
 
     return await db.withTenant(ctx.tenantId, async (tx: any) => {
       // 1. Fetch current state for diffing (with ownership check if guard)
-      const before = await tx.staff.findUnique({ where: { id } });
+      const before = await tx.staff.findFirst({
+        where: {
+          id,
+          ...this.getStaffScopeWhere(ctx),
+        }
+      });
       if (!before) {
         const error: any = new Error('NOT_FOUND_OR_ACCESS_DENIED');
         error.status = 404;
         throw error;
       }
 
-      // 2. Perform update
+      // 2. Sanitize data: Do not allow modifying id, tenantId or username via this path to protect RLS
+      const { id: _id, tenantId: _tId, username: _u, staffId, ...updateData } = data;
+
       const staff = await tx.staff.update({
-        where: { id },
+        where: { id: before.id },
         data: {
-          ...data,
+          ...updateData,
+          ...(staffId !== undefined ? { staffId: typeof staffId === 'string' ? staffId.trim() || null : staffId } : {}),
           updatedAt: new Date()
         }
       });
@@ -323,7 +417,26 @@ export class StaffRepository {
         CacheManager.del(`auth_metadata:${id}`)
       ]);
 
-      // 3. Log Sensitive Change with Diff
+      // 3. Dispatch Domain Event (Transactional Outbox)
+      await EventBus.dispatch({
+        type: 'STAFF_UPDATED',
+        version: '1.1',
+        tenantId: ctx.tenantId,
+        actorId: ctx.userId,
+        payload: { 
+          staffId: id, 
+          before: {
+            status: before.status,
+            role: before.role
+          },
+          after: {
+            status: staff.status,
+            role: staff.role
+          }
+        }
+      }, tx);
+
+      // 4. Log Sensitive Change with Diff
       await AuditService.logSensitiveChange(
         ctx.userId,
         ctx.tenantId,
@@ -341,11 +454,16 @@ export class StaffRepository {
     const { redis } = await import('../../infra/redis/client.js');
     
     return await db.withTenant(ctx.tenantId, async (tx: any) => {
-      const before = await tx.staff.findUnique({ where: { id } });
+      const before = await tx.staff.findFirst({
+        where: {
+          id,
+          ...this.getStaffScopeWhere(ctx),
+        }
+      });
       if (!before) return; // Idempotent or Access Denied
 
       await tx.staff.delete({
-        where: { id }
+        where: { id: before.id }
       });
 
       // Invalidate Cache
@@ -370,18 +488,21 @@ export class StaffRepository {
   private static readonly DUMMY_HASH = '$2b$10$EixZA5VK1pJ4qC0XzYJ3beFsd5X7L.R5vY96lT0.K3Jp1r2q3s4t5'; // Balanced timing hash
 
   static async getByUsername(username: string, ip?: string): Promise<Staff | null> {
-    // SECURITY SEC-003: Dùng db.withTenant('SYSTEM') để set app.current_tenant_id = 'SYSTEM' trong transaction,
-    // đồng thời dùng Prisma ORM findFirst (không phải $queryRaw) để nhận kết quả camelCase.
-    // $queryRaw trả về snake_case columns (tenant_id, full_name, token_version...) khiến
-    // user.tenantId = undefined → JWT thiếu tenantId → auth.middleware reject 401 mọi request sau đó.
-    // bypassIsolation_SYSTEM_ONLY=true bypass Prisma-level unscoped guard (createIsolationGuard),
-    // còn RLS PostgreSQL được pass nhờ set_config('SYSTEM') từ withTenant.
+    // SECURITY [V5.0.1.4]: Use findFirst so Prisma auto-maps camelCase (tenantId)
+    // Avoids snake_case errors from $queryRaw causing missing JWT payload fields.
+    //
+    // FIX [LOGIN-500]: withTenant('SYSTEM') sets PostgreSQL RLS context to 'SYSTEM' (required),
+    // but the isolationGuard extension still applies inside the transaction and blocks unscoped
+    // reads on tenant-scoped models (Staff) without a tenantId in the where clause.
+    // Solution: pass bypassIsolation_SYSTEM_ONLY: true so the guard treats this as an
+    // intentional cross-tenant lookup. This is identical to the pattern used by
+    // systemBypass(), but here we stay inside withTenant('SYSTEM') to keep the RLS
+    // session variable correctly set to 'SYSTEM'.
     let user: Staff | null = null;
-    await db.withTenant('SYSTEM', async (tx) => {
-      user = await (tx as any).staff.findFirst({
-        where: { username },
-        bypassIsolation_SYSTEM_ONLY: true,
-      }) as Staff | null;
+    await db.withTenant('SYSTEM', async (tx: any) => {
+      user = await tx.staff.findFirst({
+        where: { username }
+      });
     });
 
     // Safety check: only allow super-admin if queried via global scope
@@ -425,8 +546,11 @@ export class StaffRepository {
   static async checkReputation(idNumber: string): Promise<{ violations: number, severeViolations: number, incidents: number }> {
     if (!idNumber) return { violations: 0, severeViolations: 0, incidents: 0 };
     
-    // Cross-tenant lookup using SYSTEM scope bypass
-    const sys = db.systemBypass();
+    const sys = db.systemBypass({
+      readOnly: true,
+      reason: 'REPUTATION_READ_MODEL_ID_NUMBER_AGGREGATE',
+      caller: 'StaffRepository.checkReputation'
+    });
     const [violations, severeViolations, incidents] = await Promise.all([
       sys.disciplinaryAction.count({ where: { staff: { idNumber } } }),
       sys.disciplinaryAction.count({ where: { staff: { idNumber }, severity: 'HIGH' } }),
@@ -442,7 +566,11 @@ export class StaffRepository {
    * Strictly limited use.
    */
   static async getInternalExportData(id: string): Promise<{ staff: any, tenant: any } | null> {
-    const sys = db.systemBypass({ readOnly: true });
+    const sys = db.systemBypass({
+      readOnly: true,
+      reason: 'INTERNAL_PDF_EXPORT_STAFF_DATA',
+      caller: 'StaffRepository.getInternalExportData'
+    });
     const staff = await sys.staff.findUnique({ where: { id } });
     if (!staff) return null;
     

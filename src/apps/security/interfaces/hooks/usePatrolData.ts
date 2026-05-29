@@ -1,8 +1,13 @@
 import { useState, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../../../lib/api';
 import type { Checkpoint, PatrolRoute, PatrolLog, Stats, Notification } from '../types';
+import { useDashboardStore } from '../../store/useDashboardStore';
+import { useAuthStore } from '../../../common/store/useAuthStore';
 
 export function usePatrolData(setMessage: (msg: any) => void) {
+  const tenantId = useAuthStore((state) => state.tenantId);
+  const setDashboardTenantInfo = useDashboardStore((state) => state.setTenantInfo);
+  const setDashboardIsPro = useDashboardStore((state) => state.setIsPro);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [checkpointsNextCursor, setCheckpointsNextCursor] = useState<string | null>(null);
   const [hasMoreCheckpoints, setHasMoreCheckpoints] = useState<boolean>(false);
@@ -24,17 +29,33 @@ export function usePatrolData(setMessage: (msg: any) => void) {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   const fetchPatrolData = useCallback(async () => {
+    if (!tenantId) {
+      setCheckpoints([]);
+      setCheckpointsNextCursor(null);
+      setHasMoreCheckpoints(false);
+      setRoutes([]);
+      setPatrolLogs([]);
+      setNotifications([]);
+      setTenantInfo(null);
+      setMonthlyInsights(null);
+      setDashboardTenantInfo(null as any);
+      setDashboardIsPro(false);
+      setLoading(false);
+      setIsLoadingMonthlyAI(false);
+      return;
+    }
+
     setLoading(true);
     setIsLoadingMonthlyAI(true);
     
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('TIMEOUT')), 15000)
     );
 
     try {
       const fetchInitialCheckpoints = async (): Promise<{ data: Checkpoint[], nextCursor: string | null, hasMore: boolean }> => {
         const url = `/api/tenant/checkpoints?limit=50`;
-        const result = await apiFetch<any>(url);
+        const result = await apiFetch<any>(url, { suppressErrorToast: true });
         return {
           data: Array.isArray(result) ? result : (result?.data || []),
           nextCursor: result?.nextCursor || null,
@@ -44,25 +65,37 @@ export function usePatrolData(setMessage: (msg: any) => void) {
 
       await Promise.race([
         (async () => {
-          const [cpData, statsData, notifData, , meData, logsData, routesData, , monthlyAiData] =
-            await Promise.all([
-              fetchInitialCheckpoints().catch(() => ({ data: [], nextCursor: null, hasMore: false })),
-              apiFetch<Stats>('/api/tenant/stats').catch(() => ({
-                completionRate: 0,
-                totalCheckpoints: 0,
-                completedCheckpoints: 0,
-                dailyStats: [],
-              })),
-              apiFetch<Notification[]>('/api/tenant/notifications').catch(() => []),
-              apiFetch<any>('/api/subscriptions/pricing').catch(() => null),
-              apiFetch<any>('/api/me').catch(() => ({})),
-              apiFetch<any>('/api/tenant/patrol-logs?limit=50').catch(() => ({ data: [] })),
-              apiFetch<PatrolRoute[]>('/api/tenant/routes').catch(() => []),
-              apiFetch<any[]>('/api/tenant/attendance').catch(() => []),
-              apiFetch<any>(
+          const meData = await apiFetch<any>('/api/v1/me', { suppressErrorToast: true });
+          const resolvedTenantInfo = meData?.tenant ?? null;
+          const resolvedFeatures = resolvedTenantInfo?.resolvedFeatures ?? {};
+          const subscriptionPlan = String(
+            resolvedTenantInfo?.subscriptionPlan || resolvedTenantInfo?.plan || ''
+          ).toUpperCase();
+          const resolvedIsPro = subscriptionPlan === 'PRO' || subscriptionPlan === 'ENTERPRISE';
+          const canReadPatrol = resolvedFeatures.patrol_route !== false;
+          const canReadMonthlyInsights = resolvedFeatures.usage_analytics === true;
+
+          const [cpData, statsData, notifData, logsData, routesData] = await Promise.all([
+            fetchInitialCheckpoints().catch(() => ({ data: [], nextCursor: null, hasMore: false })),
+            apiFetch<Stats>('/api/tenant/stats', { suppressErrorToast: true }).catch(() => ({
+              completionRate: 0,
+              totalCheckpoints: 0,
+              completedCheckpoints: 0,
+              dailyStats: [],
+            })),
+            apiFetch<Notification[]>('/api/tenant/notifications', { suppressErrorToast: true }).catch(() => []),
+            apiFetch<any>('/api/tenant/patrol-logs?limit=50', { suppressErrorToast: true }).catch(() => ({ data: [] })),
+            canReadPatrol
+              ? apiFetch<PatrolRoute[]>('/api/tenant/routes', { suppressErrorToast: true }).catch(() => [])
+              : Promise.resolve([]),
+          ]);
+
+          const monthlyAiData = canReadMonthlyInsights
+            ? await apiFetch<any>(
                 `/api/reports/smart-monthly?month=${new Date().toISOString().substring(0, 7)}`,
-              ).catch(() => null),
-            ]);
+                { suppressErrorToast: true },
+              ).catch(() => null)
+            : null;
 
           const cpState = cpData as { data: Checkpoint[], nextCursor: string | null, hasMore: boolean };
           setCheckpoints(cpState.data);
@@ -70,12 +103,14 @@ export function usePatrolData(setMessage: (msg: any) => void) {
           setHasMoreCheckpoints(cpState.hasMore);
           setStats(statsData);
           setNotifications(notifData);
-          setTenantInfo(meData?.tenant);
+          setTenantInfo(resolvedTenantInfo);
+          setDashboardTenantInfo(resolvedTenantInfo);
+          setDashboardIsPro(resolvedIsPro);
           setPatrolLogs(Array.isArray(logsData) ? logsData : (logsData as any)?.data || []);
           setRoutes(Array.isArray(routesData) ? routesData : []);
           setMonthlyInsights(monthlyAiData);
 
-          if (meData?.tenant?.is_new) setShowWelcomeModal(true);
+          if (resolvedTenantInfo?.is_new) setShowWelcomeModal(true);
         })(),
         timeoutPromise
       ]);
@@ -85,6 +120,8 @@ export function usePatrolData(setMessage: (msg: any) => void) {
         setMessage({ text: 'Kết nối mạng yếu, hệ thống đang hiển thị dữ liệu đệm (Offline Mode)', type: 'error' });
       }
       if (err.message?.includes('401')) {
+        setDashboardTenantInfo(null as any);
+        setDashboardIsPro(false);
         localStorage.removeItem('scmd_user_role');
         localStorage.removeItem('scmd_jwt');
         window.location.href = '/';
@@ -93,7 +130,7 @@ export function usePatrolData(setMessage: (msg: any) => void) {
       setLoading(false);
       setIsLoadingMonthlyAI(false);
     }
-  }, [setMessage]);
+  }, [setDashboardIsPro, setDashboardTenantInfo, setMessage, tenantId]);
 
   const loadMoreCheckpoints = useCallback(async () => {
     if (!hasMoreCheckpoints || !checkpointsNextCursor || loadingMoreCheckpoints) return;

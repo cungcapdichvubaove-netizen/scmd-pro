@@ -10,6 +10,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import './index.css';
@@ -31,6 +32,40 @@ if (typeof window !== 'undefined') {
       event.preventDefault();
       // Silently consume benign HMR failure
     }
+  });
+}
+
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.PROD) {
+  let refreshing = false;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
+  const updateServiceWorker = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      import('./lib/toast')
+        .then(({ toast }) => {
+          toast('SCMD Pro da co ban cap nhat moi. He thong se dong bo va tai lai an toan trong it giay.', {
+            duration: 8000,
+            id: 'pwa-update-available',
+          });
+        })
+        .catch(() => undefined);
+    },
+    onRegisteredSW(_swUrl, registration) {
+      void registration?.update();
+    },
+    onRegisterError(error) {
+      console.warn('[PWA] Khong the dang ky service worker:', error);
+    },
+  });
+
+  window.addEventListener('beforeunload', () => {
+    void updateServiceWorker(true);
   });
 }
 

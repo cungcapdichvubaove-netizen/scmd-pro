@@ -1,19 +1,28 @@
 {
   "name": "scmdpro-backend",
-  "version": "5.0.0",
+  "version": "5.9.0-4",
+  "scmdVersion": "V.5.9.0.4",
   "type": "module",
   "scripts": {
     "dev": "tsx src/server/index.ts",
-    "build": "NODE_OPTIONS=--max-old-space-size=4096 npm run db:generate && npm run build:frontend && npm run build:server && npm run build:backend",
-    "build:frontend": "NODE_OPTIONS=--max-old-space-size=4096 vite build",
-    "build:server": "NODE_OPTIONS=--max-old-space-size=4096 esbuild src/server/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --target=node22 --packages=external",
-    "build:backend": "NODE_OPTIONS=--max-old-space-size=4096 tsc -p tsconfig.backend.json",
+    "build": "npm run db:generate && npm run build:frontend && npm run build:server && npm run build:backend",
+    "build:frontend": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
+    "build:server": "esbuild src/server/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --target=node22 --packages=external",
+    "build:backend": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -p tsconfig.backend.json",
     "start": "node --max-old-space-size=2048 dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx src/server/modules/auth/seed.ts",
+    "db:seed:ktc-ocb": "tsx prisma/seeders/index.ts --tier=ktc-ocb",
+    "db:seed:ktc-ocb:reset": "tsx prisma/seeders/index.ts --tier=ktc-ocb --reset-ktc",
     "lint": "eslint . && tsc --noEmit",
-    "test": "vitest run"
+    "security:scan": "node scripts/security-scan.mjs",
+    "architecture:scan": "node scripts/architecture-scan.mjs",
+    "version:check": "node scripts/version-check.mjs",
+    "precommit": "npm run security:scan && npm run architecture:scan && npm run version:check && npm run lint",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "contact:retention": "tsx scripts/contact-leads-retention.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1043.0",
@@ -38,6 +47,7 @@
     "@socket.io/redis-adapter": "^8.3.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.99.2",
+    "@types/leaflet": "^1.9.21",
     "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.76.1",
@@ -60,7 +70,8 @@
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
-    "lucide-react": "^1.9.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.16.0",
     "motion": "^12.38.0",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.7",
@@ -76,6 +87,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-google-recaptcha": "^3.1.0",
+    "react-helmet-async": "^3.0.0",
     "react-hot-toast": "^2.6.0",
     "react-i18next": "^17.0.6",
     "react-icons": "^5.6.0",
@@ -100,7 +112,7 @@
     "@types/ioredis-mock": "^8.2.7",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/multer": "^1.4.12",
-    "@types/node": "^22.19.18",
+    "@types/node": "^22.19.19",
     "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.11.10",
     "@types/react": "^19.2.14",
@@ -109,7 +121,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
     "@vitejs/plugin-react": "^5.2.0",
-    "@vitest/coverage-v8": "^4.1.5",
+    "@vitest/coverage-v8": "^3.2.4",
     "esbuild": "^0.28.0",
     "eslint": "^10.2.1",
     "ioredis-mock": "^8.13.1",
@@ -119,6 +131,7 @@
     "typescript": "~5.7.3",
     "vite": "^7.3.2",
     "vite-plugin-pwa": "latest",
-    "vitest": "^4.1.5"
+    "vitest": "^3.2.4"
   }
 }
+

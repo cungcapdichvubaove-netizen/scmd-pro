@@ -24,9 +24,10 @@ export const IncidentReport: React.FC<IncidentReportProps> = ({ onSuccess, isMod
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const tenantId = localStorage.getItem('scmd_tenant_id') || 'default';
-  const deviceSecret = localStorage.getItem('scmd_device_secret') || 'SCMD_SECRET_2026';
+  const deviceSecret = localStorage.getItem('scmd_device_secret');
 
   const handleCapture = (url: string) => {
     setImage(url);
@@ -39,9 +40,6 @@ export const IncidentReport: React.FC<IncidentReportProps> = ({ onSuccess, isMod
     try {
       const data = await apiFetch('/api/v1/ai/analyze-incident-image', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('scmd_jwt')}`
-        },
         body: JSON.stringify({ image: urlOrBase64 })
       });
       setResult(data);
@@ -53,6 +51,13 @@ export const IncidentReport: React.FC<IncidentReportProps> = ({ onSuccess, isMod
   };
 
   const handleSubmit = async () => {
+    setSubmitError(null);
+
+    if (!deviceSecret) {
+      setSubmitError('Thiết bị chưa được xác thực. Vui lòng đăng nhập lại để tiếp tục gửi báo cáo sự cố.');
+      return;
+    }
+
     setSubmitting(true);
     const idempKey = 'incident-' + Date.now() + '-' + Math.random().toString(36).substring(7);
     const reportPayload = {
@@ -80,7 +85,7 @@ export const IncidentReport: React.FC<IncidentReportProps> = ({ onSuccess, isMod
         if (onSuccess) onSuccess();
       } catch (err) {
         console.error(err);
-        alert('Lỗi lưu ngoại tuyến.');
+        setSubmitError('Không thể lưu báo cáo ngoại tuyến lúc này.');
       } finally {
         setSubmitting(false);
       }
@@ -102,7 +107,7 @@ export const IncidentReport: React.FC<IncidentReportProps> = ({ onSuccess, isMod
       }
     } catch (err) {
       console.error(err);
-      alert('Không thể báo cáo sự cố lúc này.');
+      setSubmitError('Không thể báo cáo sự cố lúc này.');
     } finally {
       setSubmitting(false);
     }
@@ -140,6 +145,13 @@ export const IncidentReport: React.FC<IncidentReportProps> = ({ onSuccess, isMod
       )}
 
       <div className="space-y-6 px-2">
+        {submitError && (
+          <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-bold text-red-100">
+            <AlertCircle className="mt-0.5 shrink-0 text-red-400" size={18} />
+            <p>{submitError}</p>
+          </div>
+        )}
+
         <div className="relative aspect-video bg-slate-900/60 rounded-3xl border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden group hover:border-scmd-cyber transition-all">
           {image ? (
             <div className="relative w-full h-full">

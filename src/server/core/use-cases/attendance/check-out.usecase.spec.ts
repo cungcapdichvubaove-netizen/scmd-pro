@@ -90,4 +90,51 @@ describe('AttendanceCheckOutUseCase', () => {
 
     vi.useRealTimers();
   });
+
+  it('should always use ctx.userId for open-checkin lookup and checkout persistence even if payload is polluted with staffId', async () => {
+    const checkInDate = new Date('2026-05-23T01:00:00.000Z');
+    const mockOpenCheckIn = {
+      id: 'check-in-record',
+      checkInAt: checkInDate,
+      shiftScheduleId: 'shift-1'
+    };
+
+    const mockFindFirst = vi.fn().mockResolvedValue(mockOpenCheckIn);
+    const mockShiftScheduleFindUnique = vi.fn().mockResolvedValue(null);
+    vi.mocked(db.forTenant).mockReturnValue({
+      attendanceRecord: { findFirst: mockFindFirst } as any,
+      shiftSchedule: { findUnique: mockShiftScheduleFindUnique } as any
+    } as any);
+
+    const txUpdate = vi.fn().mockResolvedValue(true);
+    const txCreate = vi.fn().mockResolvedValue({ id: 'check-out-record', type: 'CHECK_OUT' });
+
+    vi.mocked(db.withTenant).mockImplementation(async (_tenantId, cb) => {
+      return cb({
+        attendanceRecord: {
+          update: txUpdate,
+          create: txCreate
+        }
+      });
+    });
+
+    await useCase.execute(mockContext, {
+      ...mockPayload,
+      staffId: 'forged-staff-id'
+    } as any);
+
+    expect(mockFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        staffId: mockContext.userId,
+      })
+    }));
+
+    expect(txCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        tenantId: mockContext.tenantId,
+        staffId: mockContext.userId,
+        shiftScheduleId: 'shift-1',
+      })
+    }));
+  });
 });

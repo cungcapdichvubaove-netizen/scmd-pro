@@ -8,7 +8,7 @@ interface AuthState {
   token: string | null;
   subscriptionPlan: 'FREE' | 'PRO' | 'ENTERPRISE' | null;
   user: { name?: string; staffId?: string } | null;
-  setAuthUser: (role: AuthUser['role'] | null, tenantId?: string, token?: string, user?: { name?: string; staffId?: string }, subscriptionPlan?: 'FREE' | 'PRO' | 'ENTERPRISE') => void;
+  setAuthUser: (role: AuthUser['role'] | null, tenantId?: string, token?: string | null, user?: { name?: string; staffId?: string }, subscriptionPlan?: 'FREE' | 'PRO' | 'ENTERPRISE') => void;
   clearAuth: () => void;
 }
 
@@ -27,31 +27,35 @@ const safeLocalStorage = {
   }
 };
 
+safeLocalStorage.removeItem('scmd_jwt');
+safeLocalStorage.removeItem('scmd_refresh_token');
+
 export const useAuthStore = create<AuthState>((set) => ({
   tenantId: safeLocalStorage.getItem('scmd_tenant_id'),
   role: (safeLocalStorage.getItem('scmd_user_role') as any) || null,
-  token: safeLocalStorage.getItem('scmd_jwt'),
+  token: null,
   subscriptionPlan: (safeLocalStorage.getItem('scmd_subscription_plan') as any) || null,
   user: JSON.parse(safeLocalStorage.getItem('scmd_user_profile') || 'null'),
-  setAuthUser: (role, tenantId, token, user, subscriptionPlan) => {
+  setAuthUser: (role, tenantId, _token, user, subscriptionPlan) => {
     if (role) safeLocalStorage.setItem('scmd_user_role', role);
     else safeLocalStorage.removeItem('scmd_user_role');
 
     if (tenantId) safeLocalStorage.setItem('scmd_tenant_id', tenantId);
     else safeLocalStorage.removeItem('scmd_tenant_id');
 
-    if (token) safeLocalStorage.setItem('scmd_jwt', token);
+    safeLocalStorage.removeItem('scmd_jwt');
+    safeLocalStorage.removeItem('scmd_refresh_token');
 
     if (user) safeLocalStorage.setItem('scmd_user_profile', JSON.stringify(user));
     else safeLocalStorage.removeItem('scmd_user_profile');
 
     if (subscriptionPlan) safeLocalStorage.setItem('scmd_subscription_plan', subscriptionPlan);
-    else if (role === 'super-admin') safeLocalStorage.setItem('scmd_subscription_plan', 'PRO'); // Super admin always PRO features
+    else if (role === 'super-admin') safeLocalStorage.setItem('scmd_subscription_plan', 'PRO');
 
-    set({ 
-      role, 
-      tenantId: tenantId || null, 
-      token: token || safeLocalStorage.getItem('scmd_jwt'),
+    set({
+      role,
+      tenantId: tenantId || null,
+      token: null,
       user: user || null,
       subscriptionPlan: subscriptionPlan || (role === 'super-admin' ? 'PRO' : (safeLocalStorage.getItem('scmd_subscription_plan') as any) || 'FREE')
     });
@@ -67,4 +71,3 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ role: null, tenantId: null, token: null, user: null, subscriptionPlan: null });
   }
 }));
-

@@ -14,7 +14,7 @@ interface PriorityTask {
 
 interface PriorityWidgetProps {
   tasks: PriorityTask[];
-  onExport: () => void;
+  onExport: (format: 'print' | 'excel', tasks: PriorityTask[]) => void;
 }
 
 export const PriorityWidget: React.FC<PriorityWidgetProps> = ({ tasks, onExport }) => {
@@ -78,12 +78,20 @@ export const PriorityWidget: React.FC<PriorityWidgetProps> = ({ tasks, onExport 
           Xuất dữ liệu ca trực hiện tại ra định dạng PDF/Excel chuyên nghiệp để gửi cho khách hàng hoặc lưu trữ.
         </p>
         
-        <SCMDButton 
-          onClick={onExport}
-          className="w-full h-14 bg-scmd-navy/80 hover:bg-scmd-navy border-white/5 hover:border-scmd-primary/30"
-        >
-          <Download size={18} /> Tải báo cáo ca trực
-        </SCMDButton>
+        <div className="grid grid-cols-2 gap-3">
+          <SCMDButton 
+            onClick={() => onExport('print', tasks)}
+            className="w-full h-14 bg-scmd-navy/80 hover:bg-scmd-navy border-white/5 hover:border-scmd-primary/30"
+          >
+            <Download size={18} /> In / PDF
+          </SCMDButton>
+          <SCMDButton 
+            onClick={() => onExport('excel', tasks)}
+            className="w-full h-14 bg-scmd-primary hover:bg-scmd-primary/80 text-white border-scmd-primary/30"
+          >
+            <Download size={18} /> Excel
+          </SCMDButton>
+        </div>
       </div>
     </div>
   );

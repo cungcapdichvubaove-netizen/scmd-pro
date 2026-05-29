@@ -1,6 +1,7 @@
 import { db } from '../../core/db/prisma.js';
 import bcrypt from 'bcryptjs';
 import { SubscriptionPlan, PlanTier } from '@prisma/client';
+import { resolveSeedPassword, shouldResetDemoSeedPasswords } from './seed-password.policy.js';
 
 export async function seed() {
   console.log('🌱 Starting database synchronization and seeding...');
@@ -69,24 +70,30 @@ export async function seed() {
     // ============================================================
     // 2. STAFF WITH PASSWORDS (SEC-FIX: H-03 - No Plaintext)
     // ============================================================
-    const rawSuperAdminPass = process.env.SEED_SUPERADMIN_PASSWORD || 'Admin@2025!';
-    const rawTenantAdminPass = process.env.SEED_TENANT_ADMIN_PASSWORD || 'Demo@2025!';
-    const rawGuardPass = process.env.SEED_GUARD_PASSWORD || 'Guard@2025!';
+    const rawSuperAdminPass = resolveSeedPassword('SEED_SUPERADMIN_PASSWORD');
+    const rawTenantAdminPass = resolveSeedPassword('SEED_TENANT_ADMIN_PASSWORD');
+    const rawGuardPass = resolveSeedPassword('SEED_GUARD_PASSWORD');
+    const rawCommanderPass = process.env.SEED_COMMANDER_PASSWORD || rawTenantAdminPass;
+    const resetDemoSeedPasswords = shouldResetDemoSeedPasswords();
 
-    if (!process.env.SEED_SUPERADMIN_PASSWORD) {
-      console.warn('⚠️ [SECURITY] SEED_SUPERADMIN_PASSWORD not set. Using default (NOT RECOMMENDED FOR PROD).');
-    }
 
     const superAdminHash  = await bcrypt.hash(rawSuperAdminPass, SALT_ROUNDS);
     const tenantAdminHash = await bcrypt.hash(rawTenantAdminPass, SALT_ROUNDS);
     const guardHash       = await bcrypt.hash(rawGuardPass, SALT_ROUNDS);
+    const commanderHash   = await bcrypt.hash(rawCommanderPass, SALT_ROUNDS);
 
     await sys.staff.upsert({
       where: { username: 'superadmin' },
       // SECURITY: Không update password khi record đã tồn tại.
       // Password chỉ được set lúc CREATE mới để tránh reset password admin đã thay đổi.
       // Nếu cần reset password, dùng script riêng hoặc SEED_SUPERADMIN_PASSWORD env var khi deploy lần đầu.
-      update: { status: 'active', role: 'super-admin' },
+      // Production never resets existing passwords. Non-production can repair demo
+      // passwords only when SEED_RESET_DEMO_PASSWORDS=true is set explicitly.
+      update: {
+        status: 'active',
+        role: 'super-admin',
+        ...(resetDemoSeedPasswords ? { password: superAdminHash, tokenVersion: { increment: 1 } } : {}),
+      },
       create: {
         id: 'staff-super-admin',
         tenantId: SYSTEM_TENANT_ID,
@@ -102,7 +109,11 @@ export async function seed() {
 
     await sys.staff.upsert({
       where: { username: 'admin_vinhomes' },
-      update: { status: 'active', role: 'tenant-admin' },
+      update: {
+        status: 'active',
+        role: 'tenant-admin',
+        ...(resetDemoSeedPasswords ? { password: tenantAdminHash, tokenVersion: { increment: 1 } } : {}),
+      },
       create: {
         id: 'staff-vinhomes-admin',
         tenantId: VINHOMES_TENANT_ID,
@@ -118,7 +129,11 @@ export async function seed() {
 
     await sys.staff.upsert({
       where: { username: 'admin_anhoi' },
-      update: { status: 'active', role: 'tenant-admin' },
+      update: {
+        status: 'active',
+        role: 'tenant-admin',
+        ...(resetDemoSeedPasswords ? { password: tenantAdminHash, tokenVersion: { increment: 1 } } : {}),
+      },
       create: {
         id: 'staff-anhoi-admin',
         tenantId: ANHOI_TENANT_ID,
@@ -132,13 +147,40 @@ export async function seed() {
       },
     });
 
+    const commanderVinhomes = await sys.staff.upsert({
+      where: { username: 'commander_vinhomes' },
+      update: {
+        status: 'active',
+        role: 'vendor-commander',
+        tenantId: VINHOMES_TENANT_ID,
+        fullName: 'Chỉ huy Vinhomes',
+        email: 'commander@vinhomes.local',
+        ...(resetDemoSeedPasswords ? { password: commanderHash, tokenVersion: { increment: 1 } } : {}),
+      },
+      create: {
+        id: 'staff-vinhomes-commander',
+        tenantId: VINHOMES_TENANT_ID,
+        username: 'commander_vinhomes',
+        password: commanderHash,
+        fullName: 'Chỉ huy Vinhomes',
+        role: 'vendor-commander',
+        status: 'active',
+        tokenVersion: 1,
+        email: 'commander@vinhomes.local',
+      },
+    });
+
     console.log('✅ Staff accounts seeded.');
+    console.log(`✅ Staff seeded: ${commanderVinhomes.username} (vendor-commander)`);
 
     const staffA = await sys.staff.upsert({
       where: { username: 'test_guard_1' },
       update: {
         fullName: 'Nguyễn Văn An',
         role: 'guard',
+        status: 'active',
+        tenantId: VINHOMES_TENANT_ID,
+        ...(resetDemoSeedPasswords ? { password: guardHash, tokenVersion: { increment: 1 } } : {}),
       },
       create: {
         id: 'staff-an-uuid',
@@ -329,10 +371,13 @@ export async function seed() {
         'checkpoint:read', 'checkpoint:write',
         'log:read', 'log:write',
         'report:generate',
+        'report:finalize',
         'tenant:manage',
         'system:manage',
         'task:read', 'task:write',
         'vendor:read', 'vendor:write',
+        'vendor:dispute:submit', 'vendor:dispute:view',
+        'violation:review', 'violation:resolve',
         'billing:read', 'billing:write',
       ],
       'tenant-admin': [
@@ -340,8 +385,11 @@ export async function seed() {
         'checkpoint:read', 'checkpoint:write',
         'log:read', 'log:write',
         'report:generate',
+        'report:finalize',
         'task:read', 'task:write',
         'vendor:read', 'vendor:write',
+        'vendor:dispute:view',
+        'violation:review', 'violation:resolve',
       ],
       'supervisor': [
         'staff:read',
@@ -349,6 +397,26 @@ export async function seed() {
         'log:read', 'log:write',
         'report:generate',
         'task:read', 'task:write',
+        'vendor:read',
+        'vendor:dispute:view',
+        'violation:review',
+      ],
+      'vendor-commander': [
+        'staff:read', 'staff:write',
+        'checkpoint:read',
+        'log:read', 'log:write',
+        'report:generate',
+        'task:read', 'task:write',
+        'vendor:read',
+        'vendor:dispute:view', 'vendor:dispute:submit',
+        'violation:review',
+      ],
+      'vendor-representative': [
+        'staff:read',
+        'log:read',
+        'report:generate',
+        'vendor:read',
+        'vendor:dispute:view', 'vendor:dispute:submit',
       ],
       'technician': [
         'checkpoint:read', 'checkpoint:write',
@@ -403,8 +471,8 @@ export async function seed() {
     console.log('✅ System config initialized.');
   });
 
-  const getMaskedPass = (p: string | undefined, def: string) =>
-    p ? '******** (From ENV)' : `${def} (DEFAULT)`;
+  const getMaskedPass = (p: string | undefined) =>
+    p ? '******** (From ENV)' : 'MISSING - seed would fail before account creation';
 
   console.log(`
 ╔══════════════════════════════════════════════════════╗
@@ -412,15 +480,19 @@ export async function seed() {
 ╠══════════════════════════════════════════════════════╣
 ║  SUPER ADMIN (Quản trị hệ thống)                    ║
 ║    Workspace: system                                ║
-║    Username : superadmin     password: ${getMaskedPass(process.env.SEED_SUPERADMIN_PASSWORD, 'Admin@2025!')}
+║    Username : superadmin     password: ${getMaskedPass(process.env.SEED_SUPERADMIN_PASSWORD)}
 ╠══════════════════════════════════════════════════════╣
 ║  VINHOMES ADMIN (Demo 1)                            ║
 ║    Workspace: vinhomes                              ║
-║    Username : admin_vinhomes password: ${getMaskedPass(process.env.SEED_TENANT_ADMIN_PASSWORD, 'Demo@2025!')}
+║    Username : admin_vinhomes password: ${getMaskedPass(process.env.SEED_TENANT_ADMIN_PASSWORD)}
+╠══════════════════════════════════════════════════════╣
+║  VINHOMES COMMANDER (Demo 1)                        ║
+║    Workspace: vinhomes                              ║
+║    Username : commander_vinhomes password: ${getMaskedPass(process.env.SEED_COMMANDER_PASSWORD || process.env.SEED_TENANT_ADMIN_PASSWORD)}
 ╠══════════════════════════════════════════════════════╣
 ║  AN HOI ADMIN (Demo 2)                              ║
 ║    Workspace: anhoi                                 ║
-║    Username : admin_anhoi    password: ${getMaskedPass(process.env.SEED_TENANT_ADMIN_PASSWORD, 'Demo@2025!')}
+║    Username : admin_anhoi    password: ${getMaskedPass(process.env.SEED_TENANT_ADMIN_PASSWORD)}
 ╚══════════════════════════════════════════════════════╝
 `);
 }

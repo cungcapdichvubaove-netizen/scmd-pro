@@ -23,7 +23,7 @@ export function TenantBillingTable({}: Props) {
             key={f}
             onClick={() => setFilter(f)}
             className={`h-9 px-4 rounded-xl text-xs font-bold whitespace-nowrap transition-all uppercase tracking-widest ${
-              filter === f ? 'bg-[#2563EB] text-white shadow-lg shadow-blue-500/20' : 'bg-[#112240] text-[#8892B0] hover:text-[#CCD6F6] border border-white/5'
+              filter === f ? 'bg-scmd-cyber text-white shadow-lg shadow-blue-500/20' : 'bg-scmd-admin-rail text-[#8892B0] hover:text-scmd-admin-text-muted border border-white/5'
             }`}
           >
             {f}
@@ -31,7 +31,7 @@ export function TenantBillingTable({}: Props) {
         ))}
       </div>
 
-      <div className="bg-[#112240] rounded-2xl border border-white/5 overflow-hidden shadow-xl">
+      <div className="bg-scmd-admin-rail rounded-2xl border border-white/5 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -52,7 +52,7 @@ export function TenantBillingTable({}: Props) {
                 >
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
-                      <span className="text-[#CCD6F6] font-bold text-sm tracking-tight">{t.tenant.name}</span>
+                      <span className="text-scmd-admin-text-muted font-bold text-sm tracking-tight">{t.tenant.name}</span>
                       <span className="text-[#495670] text-[10px] font-mono">{t.tenant.subdomain}.scmd.pro</span>
                     </div>
                   </td>
@@ -60,7 +60,7 @@ export function TenantBillingTable({}: Props) {
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5">
                         <Zap size={12} className="text-blue-400" />
-                        <span className="text-[11px] font-black text-[#CCD6F6] uppercase tracking-wider">{t.plan}</span>
+                        <span className="text-[11px] font-black text-scmd-admin-text-muted uppercase tracking-wider">{t.plan}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-[10px] text-[#8892B0] font-bold">
                         <Users size={12} />
@@ -71,7 +71,7 @@ export function TenantBillingTable({}: Props) {
                   <td className="px-6 py-4">
                     {t.expiresAt ? (
                       <div className="flex flex-col">
-                        <div className="flex items-center gap-1.5 text-[#CCD6F6]">
+                        <div className="flex items-center gap-1.5 text-scmd-admin-text-muted">
                           <Calendar size={12} className="text-blue-400" />
                           <span className="text-xs font-bold">{new Date(t.expiresAt).toLocaleDateString('vi-VN')}</span>
                         </div>

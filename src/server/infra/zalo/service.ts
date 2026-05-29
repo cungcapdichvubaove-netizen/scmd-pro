@@ -66,7 +66,7 @@ class ZaloServiceImplementation {
         },
         body: JSON.stringify(payload)
       });
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
       
       if (data.error) {
         logger.error({ data, phone: params.phone, tenantId: params.tenantId }, 'Zalo API returned error');

@@ -20,16 +20,21 @@ export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 export interface AuthUser {
   id: string;
   username: string;
-  role: 'guard' | 'supervisor' | 'technician' | 'tenant-admin' | 'super-admin';
+  role: 'guard' | 'supervisor' | 'technician' | 'tenant-admin' | 'super-admin' | 'vendor-commander' | 'vendor-representative';
   tenantId: string;
   name: string;
+  staffId?: string | null;
   permissions: string[];
   tokenVersion: number;
+  assignedVendorId?: string | null;
+  assignedSiteId?: string | null;
+  assignedContractId?: string | null;
 }
 
 export interface LoginResponse {
-  token: string;
-  refreshToken: string;
+  token?: string;
+  refreshToken?: string;
+  csrfRequired?: boolean;
   user: AuthUser;
 }
 

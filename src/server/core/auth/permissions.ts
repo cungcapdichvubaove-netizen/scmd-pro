@@ -18,6 +18,11 @@ export type Permission =
   | 'task:write'
   | 'vendor:read'
   | 'vendor:write'
+  | 'vendor:dispute:submit'
+  | 'vendor:dispute:view'
+  | 'violation:review'
+  | 'violation:resolve'
+  | 'report:finalize'
   | 'billing:read'
   | 'billing:write';
 
@@ -26,10 +31,13 @@ export const ALL_PERMISSIONS: Permission[] = [
   'checkpoint:read', 'checkpoint:write', 
   'log:read', 'log:write', 
   'report:generate', 
+  'report:finalize',
   'tenant:manage', 
   'system:manage',
   'task:read', 'task:write',
   'vendor:read', 'vendor:write',
+  'vendor:dispute:submit', 'vendor:dispute:view',
+  'violation:review', 'violation:resolve',
   'billing:read', 'billing:write'
 ];
 
@@ -48,10 +56,14 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'log:read',
     'log:write',
     'report:generate',
+    'report:finalize',
     'task:read',
     'task:write',
     'vendor:read',
-    'vendor:write'
+    'vendor:write',
+    'vendor:dispute:view',
+    'violation:review',
+    'violation:resolve'
   ],
   [UserRole.SUPERVISOR]: [
     'staff:read',
@@ -60,12 +72,37 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'log:write',
     'report:generate',
     'task:read',
-    'task:write'
+    'task:write',
+    'vendor:read',
+    'vendor:dispute:view',
+    'violation:review'
   ],
   [UserRole.TECHNICIAN]: [
     'checkpoint:read', 'checkpoint:write',
     'log:read',
     'task:read'
+  ],
+  [UserRole.VENDOR_COMMANDER]: [
+    'staff:read',
+    'staff:write',
+    'checkpoint:read',
+    'log:read',
+    'log:write',
+    'report:generate',
+    'task:read',
+    'task:write',
+    'vendor:read',
+    'vendor:dispute:view',
+    'vendor:dispute:submit',
+    'violation:review'
+  ],
+  [UserRole.VENDOR_REPRESENTATIVE]: [
+    'staff:read',
+    'log:read',
+    'report:generate',
+    'vendor:read',
+    'vendor:dispute:view',
+    'vendor:dispute:submit'
   ],
   [UserRole.GUARD]: [
     'checkpoint:read',
@@ -80,6 +117,26 @@ let lastLoadTime = 0;
 let cacheVersion = 0;
 const CACHE_TTL = 30; // Seconds for Redis cache
 let loadPromise: Promise<Record<UserRole, Permission[]>> | null = null;
+
+function mergeRolePermissions(base: Record<UserRole, Permission[]>, override?: Partial<Record<UserRole, Permission[]>> | null): Record<UserRole, Permission[]> {
+  const merged = { ...base } as Record<UserRole, Permission[]>;
+
+  if (!override) {
+    return merged;
+  }
+
+  for (const role of Object.values(UserRole)) {
+    if (Object.prototype.hasOwnProperty.call(override, role)) {
+      const overridePermissions = override[role] || [];
+      merged[role] = [...new Set(overridePermissions)];
+      continue;
+    }
+
+    merged[role] = [...new Set(base[role] || [])];
+  }
+
+  return merged;
+}
 
 export async function refreshDynamicPermissions() {
   dynamicPermissions = null;
@@ -119,7 +176,7 @@ async function loadDynamicPermissions() {
           });
 
           if (config && config.value) {
-            return config.value as Record<UserRole, Permission[]>;
+            return mergeRolePermissions(ROLE_PERMISSIONS, config.value as Partial<Record<UserRole, Permission[]>>);
           }
           return ROLE_PERMISSIONS;
         }, CACHE_TTL);

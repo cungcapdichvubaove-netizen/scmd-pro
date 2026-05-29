@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { 
   QrCode, 
   CheckCircle2, 
@@ -25,6 +25,8 @@ import { SCMDStatusBadge } from '../../common/interfaces/components/SCMDStatusBa
 import { SCMDSuspense } from '../../common/interfaces/components/SCMDSuspense';
 import { calculateDistance } from '../../../shared/utils/geo';
 
+import { resolveGuardNetworkStatus } from '../../../lib/guard-network-status';
+
 const TacticalMap = React.lazy(() => import('./components/TacticalMap').then(m => ({ default: m.TacticalMap })));
 
 import { usePatrolDashboardState } from './hooks/usePatrolDashboardState';
@@ -34,22 +36,26 @@ import { ElapsedTime } from './components/ElapsedTime';
 
 const MapSegment = React.memo(({ checkpoints }: { checkpoints: any[] }) => {
   return (
-    <div className="h-[220px] w-full rounded-[2.5rem] overflow-hidden border-2 border-white/5 relative z-0 shadow-scmd-deep group bg-scmd-surface">
+    <div className="h-[220px] w-full rounded-3xl overflow-hidden border border-white/10 relative z-0 shadow-scmd-deep group bg-scmd-surface">
       <React.Suspense fallback={<SCMDSuspense fullHeight={false} message="Đang nạp bản đồ..." />}>
         <TacticalMap 
-          points={Array.isArray(checkpoints) ? checkpoints.map(cp => ({
-            id: cp.id,
-            name: cp.name,
-            lat: cp.latitude || 10.762622,
-            lon: cp.longitude || 106.660172,
-            status: cp.status === 'completed' ? 'ACTIVE' : 'INACTIVE',
-            type: 'CHECKPOINT'
-          })) : []}
+          points={Array.isArray(checkpoints) 
+            ? checkpoints
+                .filter(cp => cp.latitude && cp.longitude)
+                .map(cp => ({
+                  id: cp.id,
+                  name: cp.name,
+                  lat: cp.latitude,
+                  lon: cp.longitude,
+                  status: cp.status === 'completed' ? 'ACTIVE' : 'INACTIVE',
+                  type: 'CHECKPOINT'
+                })) 
+            : []}
           showRouteLine={true}
           onPointClick={(point) => console.log('Clicked', point)}
         />
       </React.Suspense>
-      <div className="absolute inset-0 pointer-events-none border-[6px] border-scmd-navy rounded-[2.5rem] mix-blend-overlay opacity-50" />
+      <div className="absolute inset-0 pointer-events-none border-[4px] border-scmd-navy rounded-3xl mix-blend-overlay opacity-50" />
     </div>
   );
 });
@@ -85,9 +91,17 @@ export const PatrolDashboard: React.FC = () => {
   // Fine-grained selectors for real-time data
   const isOffline = useDashboardStore((s: any) => s.patrolState.isOffline);
   const pendingCount = useDashboardStore((s: any) => s.patrolState.pendingCount);
+  const failedSyncCount = useDashboardStore((s: any) => s.patrolState.failedSyncCount);
   const lastCheckpointTime = useDashboardStore((s: any) => s.patrolState.lastCheckpointTime);
   const activeCheckpoint = useDashboardStore((s: any) => s.patrolState.activeCheckpoint);
   const currentLocation = useDashboardStore((s: any) => s.patrolState.currentLocation);
+
+  const fieldReadiness = useMemo(() => resolveGuardNetworkStatus({
+    online: !isOffline,
+    pendingCount,
+    failedCount: failedSyncCount,
+    gpsAvailable: Boolean(currentLocation),
+  }), [currentLocation, failedSyncCount, isOffline, pendingCount]);
 
   const getTaskIcon = useCallback((task: string) => {
     const t = task.toLowerCase();
@@ -153,6 +167,39 @@ export const PatrolDashboard: React.FC = () => {
         </div>
       </header>
 
+      <SCMDCard className={cn(
+        'mx-2 border p-4 shadow-xl',
+        fieldReadiness.level === 'online' && 'border-emerald-500/20 bg-emerald-500/10',
+        fieldReadiness.level === 'degraded' && 'border-amber-500/30 bg-amber-500/10',
+        fieldReadiness.level === 'offline' && 'border-red-500/30 bg-red-500/10'
+      )}>
+        <div className="flex items-start gap-3">
+          <div className={cn(
+            'mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border',
+            fieldReadiness.level === 'online' && 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300',
+            fieldReadiness.level === 'degraded' && 'border-amber-500/30 bg-amber-500/20 text-amber-300',
+            fieldReadiness.level === 'offline' && 'border-red-500/30 bg-red-500/20 text-red-300'
+          )}>
+            {fieldReadiness.level === 'offline' ? <WifiOff size={18} /> : <Wifi size={18} />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-black uppercase text-white">{fieldReadiness.title}</p>
+              {fieldReadiness.canSync && (
+                <button
+                  type="button"
+                  onClick={syncOfflineData}
+                  className="min-h-12 shrink-0 rounded-2xl border border-[#2563EB]/30 bg-[#2563EB]/20 px-4 text-[10px] font-black uppercase tracking-widest text-[#93C5FD] active:scale-95"
+                >
+                  Đồng bộ
+                </button>
+              )}
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-scmd-silver/70">{fieldReadiness.description}</p>
+          </div>
+        </div>
+      </SCMDCard>
+
       <MapSegment checkpoints={checkpoints} />
 
       <div className="space-y-4 px-2">
@@ -205,7 +252,7 @@ export const PatrolDashboard: React.FC = () => {
               onClick={handleScan}
               disabled={scanning || verifying || isPatrolDone}
               className={cn(
-                "w-20 h-20 rounded-full flex flex-col items-center justify-center transition-all relative z-10 border-[6px]",
+                "w-20 h-20 rounded-full flex flex-col items-center justify-center transition-all relative z-10 border-4",
                 scanning || verifying
                   ? "bg-scmd-surface text-scmd-silver/20 border-scmd-navy"
                   : isPatrolDone
@@ -354,7 +401,7 @@ export const PatrolDashboard: React.FC = () => {
                 >
                   <SCMDCard
                     className={cn(
-                      "p-6 border-2 transition-all duration-500 flex items-center gap-6 min-h-[120px] card-active",
+                      "p-6 border transition-all duration-500 flex items-center gap-6 min-h-[120px] card-active rounded-2xl",
                       checklistValues[item.id] 
                         ? "bg-scmd-cyber/10 border-scmd-cyber/40 scmd-glow" 
                         : "bg-scmd-slate/40 border-slate-800/80"
@@ -362,7 +409,7 @@ export const PatrolDashboard: React.FC = () => {
                     onClick={() => item.type === 'toggle' && toggleCheckItem(item.id)}
                   >
                     <div className={cn(
-                      "w-16 h-16 rounded-[2rem] flex items-center justify-center shrink-0 transition-all duration-500",
+                      "w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-500",
                       checklistValues[item.id] ? "bg-scmd-cyber text-scmd-navy" : "bg-scmd-navy text-slate-600"
                     )}>
                       {checklistValues[item.id] ? <Check size={40} strokeWidth={3} /> : getTaskIcon(item.task)}
@@ -409,7 +456,7 @@ export const PatrolDashboard: React.FC = () => {
                             referrerPolicy="no-referrer"
                             onError={(e) => {
                               const target = e.target as HTMLImageElement;
-                              target.src = "https://images.unsplash.com/photo-1590247813693-5541d1c609fd?q=80&w=200&h=200&auto=format&fit=crop";
+                              target.style.display = 'none';
                               target.onerror = null;
                             }}
                           />
@@ -440,7 +487,7 @@ export const PatrolDashboard: React.FC = () => {
                 onClick={handleCompleteCheckpoint}
                 disabled={isSendDisabled}
                 className={cn(
-                  "w-full h-20 rounded-[2.5rem] font-black text-2xl uppercase tracking-[0.2em] transition-all duration-500 flex items-center justify-center gap-4 border-b-8 active:border-b-0 active:translate-y-2",
+                  "w-full h-16 rounded-2xl font-black text-xl uppercase tracking-[0.2em] transition-all duration-500 flex items-center justify-center gap-4 border-b-4 active:border-b-0 active:translate-y-1",
                   !isSendDisabled 
                     ? "bg-scmd-cyber text-scmd-navy border-scmd-cyber/50 shadow-[0_0_60px_rgba(66,133,244,0.3)]" 
                     : "bg-scmd-slate/50 text-slate-700 border-slate-800 opacity-50"

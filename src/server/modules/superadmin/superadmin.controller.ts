@@ -11,8 +11,9 @@ import { cache } from '../../core/cache/index.js';
 import { GetGlobalAuditLogsUseCase } from './application/get-global-audit-logs.usecase.js';
 import { QueueService } from '../../core/queue/index.js';
 import { UserRole } from '../../core/architecture/types.js';
-import { permissionsSchema, refreshDynamicPermissions } from '../../core/auth/permissions.js';
+import { permissionsSchema, refreshDynamicPermissions, Permission } from '../../core/auth/permissions.js';
 import { z } from 'zod';
+import { FEATURE_FLAG_KEYS } from '../../../shared/business/feature-flags.js';
 
 import { SubscriptionPlan } from '@prisma/client';
 
@@ -180,8 +181,14 @@ export class SuperAdminController {
     try {
       const ctx = RequestContextResolver.resolve(req);
       const id = req.params.tenantId as string;
-      const { features_enabled } = z.object({ features_enabled: z.record(z.boolean()) }).parse(req.body);
-      await SuperAdminService.updateTenantFeatures(id, features_enabled);
+      const featureShape = FEATURE_FLAG_KEYS.reduce((shape, key) => {
+        shape[key] = z.boolean().optional();
+        return shape;
+      }, {} as Record<string, z.ZodBoolean | z.ZodOptional<z.ZodBoolean>>);
+      const { features_enabled } = z.object({
+        features_enabled: z.object(featureShape).partial(),
+      }).parse(req.body);
+      const result = await SuperAdminService.updateTenantFeatures(id, features_enabled);
 
       await AuditService.log({
         userId: ctx.userId,
@@ -189,10 +196,16 @@ export class SuperAdminController {
         action: 'UPDATE_TENANT_FEATURES',
         resource: `tenant/${id}`,
         status: 'SUCCESS',
-        payload: { features_enabled }
+        payload: {
+          diff: {
+            before: result.before,
+            after: result.after,
+          },
+          features_enabled: result.after,
+        }
       });
 
-      return res.json({ success: true });
+      return res.json({ success: true, features_enabled: result.after });
     } catch (err: any) {
       return next(err);
     }
@@ -271,7 +284,7 @@ export class SuperAdminController {
       const data = z.object({
         title: z.string().min(1),
         content: z.string().min(1),
-        status: z.enum(['DRAFT', 'PUBLISHED']).optional(),
+        status: z.enum(['draft', 'published']).optional(),
       }).parse(req.body);
 
       const news = await NewsRepository.create(data);
@@ -297,7 +310,7 @@ export class SuperAdminController {
       const data = z.object({
         title: z.string().min(1).optional(),
         content: z.string().min(1).optional(),
-        status: z.enum(['DRAFT', 'PUBLISHED']).optional(),
+        status: z.enum(['draft', 'published']).optional(),
       }).parse(req.body);
 
       const news = await NewsRepository.update(id, data);
@@ -341,13 +354,16 @@ export class SuperAdminController {
       const cursor = req.query.cursor as string | undefined;
       const take = parseInt(req.query.limit as string) || 100;
       
-      const requests = await db.withTenant('SYSTEM', async (tx) => {
-        return tx.feedback.findMany({
-          where: { type: 'UPGRADE_REQUEST' },
-          orderBy: { createdAt: 'desc' },
-          take: take + 1,
-          ...(cursor && { skip: 1, cursor: { id: cursor } }),
-        });
+      const [requests, total] = await db.withTenant('SYSTEM', async (tx) => {
+        return Promise.all([
+          tx.feedback.findMany({
+            where: { type: 'UPGRADE_REQUEST' },
+            orderBy: { createdAt: 'desc' },
+            take: take + 1,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+          }),
+          tx.feedback.count({ where: { type: 'UPGRADE_REQUEST' } }),
+        ]);
       }, { callerRole: 'super-admin' });
       
       let nextCursor: string | null = null;
@@ -365,7 +381,7 @@ export class SuperAdminController {
         status: 'SUCCESS'
       });
 
-      return res.json({ data: requests, nextCursor });
+      return res.json({ data: requests, nextCursor, total });
     } catch (err: any) {
       logger.error({ err }, 'List upgrade requests error');
       return next(err);
@@ -387,12 +403,37 @@ export class SuperAdminController {
 
       // Nếu duyệt → tự động nâng cấp plan
       if (action === 'APPROVED') {
-        const subscriptionPlan = feedback.title.includes('PRO') ? SubscriptionPlan.PRO : SubscriptionPlan.ENTERPRISE;
+        const upgradeNotification = await db.withTenant('SYSTEM', async (tx) => {
+          return tx.notification.findFirst({
+            where: {
+              tenantId: 'SYSTEM',
+              type: 'UPGRADE_REQUEST',
+              metadata: { path: ['feedbackId'], equals: feedbackId },
+            },
+            select: { metadata: true },
+            orderBy: { createdAt: 'desc' },
+          });
+        }, { callerRole: 'super-admin' });
+
+        const requestedPlan = (upgradeNotification?.metadata as any)?.requestedPlan;
+        const parsedPlan = z.nativeEnum(SubscriptionPlan).safeParse(requestedPlan);
+        if (!parsedPlan.success || parsedPlan.data === SubscriptionPlan.FREE) {
+          return res.status(409).json({
+            error: 'Khong the duyet yeu cau nang cap vi thieu metadata goi can nang cap.',
+            code: 'UPGRADE_PLAN_METADATA_REQUIRED'
+          });
+        }
+
+        const subscriptionPlan = parsedPlan.data;
         await db.system().tenant.update({
           where: { id: feedback.tenantId },
           data: { subscriptionPlan, plan: subscriptionPlan },
         });
-        await cache.del(`tenant:status:${feedback.tenantId}`);
+        await Promise.all([
+          cache.del(`tenant:status:${feedback.tenantId}`),
+          cache.del(`tenant:${feedback.tenantId}`),
+          cache.del(`tenant:features:${feedback.tenantId}`),
+        ]);
       }
 
       // Đánh dấu notification SYSTEM đã đọc (nếu có)
@@ -564,6 +605,36 @@ export class SuperAdminController {
       // Fix (b): Strip SUPER_ADMIN key to prevent removal/modification of SA permissions
       const { [UserRole.SUPER_ADMIN]: _, ...safePerms } = permissions;
 
+      // [FIX H-05]: Chặn privilege escalation — GUARD và TECHNICIAN không được gán quyền nguy hiểm.
+      // permissionsSchema chỉ validate type (array of ALL_PERMISSIONS), không chặn semantic.
+      // Không có guard này → Super Admin có thể vô tình (hoặc cố ý) gán system:manage cho Guard.
+      const FORBIDDEN_PERMS_FOR_LOW_ROLES: Partial<Record<UserRole, Permission[]>> = {
+        [UserRole.GUARD]: ['system:manage', 'tenant:manage', 'billing:read', 'billing:write'],
+        [UserRole.TECHNICIAN]: ['system:manage', 'tenant:manage', 'billing:read', 'billing:write'],
+        [UserRole.SUPERVISOR]: ['system:manage', 'tenant:manage', 'billing:write', 'report:finalize', 'vendor:write', 'violation:resolve'],
+        [UserRole.VENDOR_COMMANDER]: ['system:manage', 'tenant:manage', 'billing:read', 'billing:write', 'report:finalize', 'vendor:write', 'violation:resolve'],
+        [UserRole.VENDOR_REPRESENTATIVE]: ['system:manage', 'tenant:manage', 'billing:read', 'billing:write', 'report:finalize', 'vendor:write', 'violation:resolve', 'staff:write'],
+      };
+      for (const [role, forbidden] of Object.entries(FORBIDDEN_PERMS_FOR_LOW_ROLES)) {
+        const assigned: string[] = safePerms[role as UserRole] || [];
+        const violations = assigned.filter((p) => (forbidden as string[]).includes(p));
+        if (violations.length > 0) {
+          logger.warn({ role, violations, userId: ctx.userId }, 'SECURITY: Permission escalation attempt blocked');
+          return res.status(422).json({
+            error: 'FORBIDDEN_PERMISSION_ESCALATION',
+            role,
+            violations,
+          });
+        }
+      }
+
+      // [FIX H-05]: Lấy giá trị hiện tại để log diff before/after
+      const existingConfig = await db.system().systemConfig.findUnique({
+        where: { key: 'role_permissions' },
+        select: { value: true }
+      });
+      const permsBefore = existingConfig?.value ?? null;
+
       const config = await db.system().systemConfig.upsert({
         where: { key: 'role_permissions' },
         create: {
@@ -585,7 +656,8 @@ export class SuperAdminController {
         action: 'SUPERADMIN_UPDATE_PERMISSIONS',
         resource: 'system/permissions',
         status: 'SUCCESS',
-        payload: { permissions: safePerms }
+        // [FIX H-05]: Ghi diff đầy đủ để audit trail có thể điều tra thay đổi
+        payload: { before: permsBefore, after: safePerms }
       });
 
       return res.json(config.value);

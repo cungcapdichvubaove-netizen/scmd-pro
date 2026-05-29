@@ -24,7 +24,9 @@ const lightProcessor = async (job: any) => {
       const { db } = await import('../../core/db/prisma.js');
       const { getLightQueue } = await import('./index.js');
       
-      const tenants = await db.system().tenant.findMany({ select: { id: true }, where: { status: 'active' } });
+      const tenants = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.tenant.findMany({ select: { id: true }, where: { status: 'active' } });
+      });
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const dateStr = yesterday.toISOString().split('T')[0] || '';
@@ -62,9 +64,11 @@ const lightProcessor = async (job: any) => {
       const { db } = await import('../../core/db/prisma.js');
       const { getLightQueue } = await import('./index.js');
       
-      const tenants = await db.system().tenant.findMany({
-        where: { status: 'active' },
-        select: { id: true }
+      const tenants = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.tenant.findMany({
+          where: { status: 'active' },
+          select: { id: true }
+        });
       });
       
       logger.info({ tenantCount: tenants.length }, 'QR_HASH_ROTATION: Fan-out started');
@@ -142,10 +146,10 @@ const lightProcessor = async (job: any) => {
           const { db } = await import('../../core/db/prisma.js');
           const msg = `[AI GOM NHÓM - ${groupedAlert.count} sự kiện] ${groupedAlert.title}: ${groupedAlert.message}`;
           await ZaloService.notifyAdmins(groupedAlert.tenantId, msg, async (tId: string) => {
-            const admins = await db.forTenant(tId).staff.findMany({
+            const admins = await db.withTenant(tId, async (tx) => tx.staff.findMany({
               where: { role: { in: ['admin', 'supervisor'] }, status: 'active' },
               select: { phone: true }
-            });
+            }));
             return admins;
           });
         } catch (err) {
@@ -165,6 +169,67 @@ const lightProcessor = async (job: any) => {
       if (!tenantId) throw new Error('MISSING_TENANT_ID');
       return await TaskReminderService.processTenantDeadlines(tenantId);
     }
+    case 'INCIDENT_SLA_ESCALATION_CHECK': {
+      const { db } = await import('../../core/db/prisma.js');
+      const { getLightQueue } = await import('./index.js');
+      const tenants = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.tenant.findMany({
+          where: { status: 'active' },
+          select: { id: true }
+        });
+      });
+      const queue = getLightQueue();
+      const jobs = tenants.map((t: any) => ({
+        name: 'INCIDENT_SLA_ESCALATION_CHECK_TENANT',
+        data: { type: 'INCIDENT_SLA_ESCALATION_CHECK_TENANT', tenantId: t.id },
+        opts: { jobId: `incident-sla:${t.id}:${Date.now()}` }
+      }));
+      if (jobs.length > 0) await queue.addBulk(jobs);
+      return { triggeredTenants: tenants.length };
+    }
+    case 'INCIDENT_SLA_ESCALATION_CHECK_TENANT': {
+      const { ProcessIncidentSlaBreachUseCase } = await import('../../modules/incident/application/process-incident-sla-breach.usecase.js');
+      const { tenantId } = data;
+      if (!tenantId) throw new Error('MISSING_TENANT_ID');
+      const useCase = new ProcessIncidentSlaBreachUseCase();
+      return await useCase.execute(tenantId);
+    }
+    case 'PATROL_MISSED_CHECK': {
+      const { PatrolService } = await import('../../modules/patrol/patrol.service.js');
+      return await PatrolService.dispatchMissedPatrolChecks();
+    }
+    case 'PATROL_MISSED_CHECK_TENANT': {
+      const { PatrolService } = await import('../../modules/patrol/patrol.service.js');
+      const { tenantId } = data;
+      if (!tenantId) throw new Error('MISSING_TENANT_ID');
+      return await PatrolService.processMissedAssignments(tenantId);
+    }
+    case 'SHIFT_STAFFING_CHECK': {
+      const { db } = await import('../../core/db/prisma.js');
+      const { getLightQueue } = await import('./index.js');
+      const tenants = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.tenant.findMany({
+          where: { status: 'active' },
+          select: { id: true }
+        });
+      });
+      const queue = getLightQueue();
+      const jobs = tenants.map((t: any) => ({
+        name: 'SHIFT_STAFFING_CHECK_TENANT',
+        data: { type: 'SHIFT_STAFFING_CHECK_TENANT', tenantId: t.id },
+        opts: { jobId: `shift-staffing:${t.id}:${Date.now()}` }
+      }));
+      if (jobs.length > 0) {
+        await queue.addBulk(jobs);
+      }
+      return { triggeredTenants: tenants.length };
+    }
+    case 'SHIFT_STAFFING_CHECK_TENANT': {
+      const { ProcessOverdueShiftShortagesUseCase } = await import('../../modules/vendor/application/process-overdue-shift-shortages.usecase.js');
+      const { tenantId } = data;
+      if (!tenantId) throw new Error('MISSING_TENANT_ID');
+      return await (new ProcessOverdueShiftShortagesUseCase()).execute(tenantId);
+    }
     case 'SLO_MONITORING': {
       const { db } = await import('../../core/db/prisma.js');
       const { metrics } = await import('../../core/metrics.js');
@@ -178,33 +243,148 @@ const lightProcessor = async (job: any) => {
       // bypassIsolation_SYSTEM_ONLY vào args — nhưng Prisma truyền args của groupBy theo cấu trúc
       // khác findMany (having/by thay vì where thông thường), khiến $allOperations không inject
       // flag đúng vào args.where trước khi isolationGuard kiểm tra `args.where.tenantId`.
-      // Fix: thêm tenantId: { not: null } vào where — guard nhận diện query đã có tenant scope,
-      // semantically đúng (loại audit log không thuộc tenant nào khỏi phép tính SLO).
+      // Fix: thêm tenantId: { not: 'tenant_system' } vào where — guard nhận diện query đã có tenant scope.
+      // Loại SYSTEM tenant (tenant_system) khỏi SLO monitoring. Giá trị string hợp lệ với Prisma.
 
       // FIX TS: threshold chưa được khai báo trong scope (bug tiềm ẩn trong code gốc, esbuild bỏ qua
       // nhưng tsc strict bắt). Giá trị 5 errors/min là ngưỡng SLO chuẩn cho hệ thống này.
       const threshold = 5;
+      const tenants = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.tenant.findMany({
+          where: { status: 'active', id: { not: 'tenant_system' } },
+          select: { id: true },
+        });
+      }, { readOnly: true }) as Array<{ id: string }>;
+
+      const scopedErrorSpikes = (
+        await Promise.all(tenants.map(async (tenant) => {
+          const count = await db.withTenant(tenant.id, async (tx) => {
+            return await tx.auditLog.count({
+              where: {
+                status: 'ERROR',
+                createdAt: { gte: oneMinuteAgo },
+              },
+            });
+          }, { readOnly: true });
+
+          return count >= threshold
+            ? { tenantId: tenant.id, errorCount: count }
+            : null;
+        }))
+      ).filter((spike): spike is { tenantId: string; errorCount: number } => Boolean(spike));
+
+      const scopedSosDispatchErrors = (
+        await Promise.all(tenants.map(async (tenant) => {
+          const count = await db.withTenant(tenant.id, async (tx) => {
+            return await tx.auditLog.count({
+              where: {
+                action: 'SOS_DISPATCH',
+                status: 'ERROR',
+                createdAt: { gte: oneMinuteAgo },
+              },
+            });
+          }, { readOnly: true });
+
+          return count > 0
+            ? { tenantId: tenant.id, errorCount: count }
+            : null;
+        }))
+      ).filter((sosError): sosError is { tenantId: string; errorCount: number } => Boolean(sosError));
+
+      for (const spike of scopedErrorSpikes) {
+        logger.error({
+          tenantId: spike.tenantId,
+          errorCount: spike.errorCount,
+          category: 'PROACTIVE_ALERT',
+          alertType: 'ERROR_RATE_SPIKE'
+        }, `SLO ALERT: Tenant ${spike.tenantId} experiencing high error rate (${spike.errorCount} errors in 1m)`);
+
+        const { NotificationService } = await import('../../modules/notification/notification.service.js');
+        await NotificationService.sendSecurityAlert(
+          spike.tenantId,
+          'CẢNH BÁO SLO: Hiệu năng hệ thống giảm sút',
+          `Hệ thống ghi nhận tỷ lệ lỗi tăng cao đột biến (${spike.errorCount} lỗi/phút). Đội ngũ kỹ thuật đang kiểm tra.`,
+          'AI_ANOMALY',
+          { errorCount: spike.errorCount, time: now.toISOString() }
+        );
+
+        await ProactiveAlertService.triggerPlatformAlert({
+          type: 'ERROR_RATE_SPIKE',
+          title: `[SLO CẢNH BÁO] Hệ thống gặp lỗi diện rộng cho Tenant ${spike.tenantId}`,
+          message: `Lỗi vượt ngưỡng ${threshold}: ghi nhận ${spike.errorCount} lỗi/phút.`
+        });
+
+        await db.withTenant(spike.tenantId, async (tx) => {
+          await tx.auditLog.create({
+            data: {
+              tenantId: spike.tenantId,
+              userId: 'SYSTEM',
+              action: 'ERROR_RATE_SPIKE',
+              resource: `Tenant ${spike.tenantId} error spike: ${spike.errorCount} errors/min`,
+              status: 'ERROR',
+              timestamp: BigInt(Date.now()),
+              payload: { errorCount: spike.errorCount, threshold }
+            }
+          });
+        });
+      }
+
+      for (const sosError of scopedSosDispatchErrors) {
+        logger.error({
+          tenantId: sosError.tenantId,
+          sosDispatchErrorCount: sosError.errorCount,
+          category: 'PROACTIVE_ALERT',
+          alertType: 'SOS_DISPATCH_FAILURE'
+        }, 'SLO ALERT: Failed SOS Dispatches detected.');
+
+        await ProactiveAlertService.triggerPlatformAlert({
+          type: 'SOS_DISPATCH_FAILURE',
+          title: `[CRITICAL] Zalo SOS Dispatch Failed cho Tenant ${sosError.tenantId}`,
+          message: `Có ${sosError.errorCount} yêu cầu cứu khẩn cấp không thể gửi qua Zalo. Hãy kiểm tra cấu hình ZALO_ACCESS_TOKEN.`
+        });
+      }
+
+      const scopedSnapshot = metrics.getSnapshot();
+      const scopedSlowOps = scopedSnapshot.metrics.filter(m => m.avg > 5000 && m.key.includes('duration'));
+      
+      if (scopedSlowOps.length > 0) {
+        logger.warn({ slowOps: scopedSlowOps, category: 'SLO_MONITORING' }, 'Detected slow operations in local instance metrics');
+      }
+
+      return {
+        analyzedTenants: scopedErrorSpikes.length,
+        slowOpsCount: scopedSlowOps.length,
+        sosErrorsDetected: scopedSosDispatchErrors.length
+      };
 
       // FIX TS: Prisma groupBy với strict:true trả kiểu {} cho result — cần explicit type assertion
       // để tsc nhận diện đúng shape của tenantId và _count trên kết quả trả về.
-      type SloGroupByResult = { tenantId: string | null; _count: { id: number } };
+      /*
+      type SloGroupByResult = { tenantId: string; _count: { id: number } };
 
-      const errorSpikes = (await db.systemBypass().auditLog.groupBy({
-        by: ['tenantId'],
-        where: {
-          tenantId: { not: null as unknown as string },
-          status: 'ERROR',
-          createdAt: { gte: oneMinuteAgo }
-        },
-        _count: {
-          id: true
-        },
-        having: {
-          id: {
-            _count: { gte: threshold }
+      // [FIX] db.system() thay cho db.systemBypass():
+      // Prisma groupBy validate args TRƯỚC khi $allOperations strip bypassIsolation_SYSTEM_ONLY
+      // → flag bị Prisma engine reject với "Unknown argument".
+      // db.system() = isolationGuard trực tiếp, không inject flag.
+      // tenantId: { not: 'tenant_system' } trong where đủ để isolationGuard pass + Prisma engine chấp nhận.
+      const errorSpikes = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.auditLog.groupBy({
+          by: ['tenantId'],
+          where: {
+            tenantId: { not: 'tenant_system' }, // FIX [SLO-01]: null invalid cho Prisma groupBy non-nullable field. 'tenant_system' = SYSTEM_TENANT_ID loại SYSTEM audit logs khỏi SLO.
+            status: 'ERROR',
+            createdAt: { gte: oneMinuteAgo }
+          },
+          _count: {
+            id: true
+          },
+          having: {
+            id: {
+              _count: { gte: threshold }
+            }
           }
-        }
-      })) as SloGroupByResult[];
+        });
+      }) as SloGroupByResult[];
 
       for (const spike of errorSpikes) {
         if (!spike.tenantId) continue;
@@ -234,31 +414,37 @@ const lightProcessor = async (job: any) => {
         });
 
         // Persist to AuditLog for dashboard visibility
-        await db.systemBypass().auditLog.create({
-          data: {
-            tenantId: spike.tenantId,
+        // [FIX] Dùng db.withTenant(spike.tenantId) để create đúng tenant scope
+        await db.withTenant(spike.tenantId, async (tx) => {
+          await tx.auditLog.create({
+            data: {
+              tenantId: spike.tenantId,
             userId: 'SYSTEM',
             action: 'ERROR_RATE_SPIKE',
             resource: `Tenant ${spike.tenantId} error spike: ${spike._count.id} errors/min`,
             status: 'ERROR',
             timestamp: BigInt(Date.now()),
             payload: { errorCount: spike._count.id, threshold }
-          }
+            }
+          });
         });
       }
 
       // 2. Check for SOS Dispatch Errors
-      const sosDispatchErrors = (await db.systemBypass().auditLog.groupBy({
-        by: ['tenantId'],
-        where: {
-          tenantId: { not: null as unknown as string },
-          action: 'SOS_DISPATCH',
-          status: 'ERROR',
-          createdAt: { gte: oneMinuteAgo }
-        },
-        _count: { id: true },
-        having: { id: { _count: { gt: 0 } } }
-      })) as SloGroupByResult[];
+      // [FIX] Same: db.system() for groupBy
+      const sosDispatchErrors = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.auditLog.groupBy({
+          by: ['tenantId'],
+          where: {
+            tenantId: { not: 'tenant_system' }, // FIX [SLO-01]: null invalid cho Prisma groupBy non-nullable field. 'tenant_system' = SYSTEM_TENANT_ID loại SYSTEM audit logs khỏi SLO.
+            action: 'SOS_DISPATCH',
+            status: 'ERROR',
+            createdAt: { gte: oneMinuteAgo }
+          },
+          _count: { id: true },
+          having: { id: { _count: { gt: 0 } } }
+        });
+      }) as SloGroupByResult[];
 
       for (const sosError of sosDispatchErrors) {
         if (!sosError.tenantId) continue;
@@ -289,18 +475,20 @@ const lightProcessor = async (job: any) => {
       return { analyzedTenants: errorSpikes.length, slowOpsCount: slowOps.length, sosErrorsDetected: sosDispatchErrors.length };
     }
 
+      */
+    }
     case 'CRITICAL_INCIDENT_NOTIFY': {
       const { tenantId, incidentId, incidentType, incidentDescription } = data;
       logger.info({ incidentId, tenantId }, 'Mức độ khẩn cấp, đang kích hoạt thông báo cho quản lý qua Zalo (BullMQ).');
 
       const { db } = await import('../../core/db/prisma.js');
-      const managers = await db.forTenant(tenantId).staff.findMany({
+      const managers = await db.withTenant(tenantId, async (tx) => tx.staff.findMany({
         where: {
           role: { in: ['admin', 'supervisor', 'tenant-admin'] },
           status: 'active'
         },
         select: { phone: true, fullName: true }
-      });
+      }));
 
       const validPhones = managers
         .filter((m: any) => m.phone && /^(\+84|0)[0-9]{9,10}$/.test(m.phone))

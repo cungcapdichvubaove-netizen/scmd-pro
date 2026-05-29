@@ -9,14 +9,27 @@ import { UpdateIncidentStatusUseCase } from './application/update-incident-statu
 import { ExportIncidentPdfUseCase } from './application/export-incident-pdf.usecase.js';
 import { AnalyzeIncidentImageUseCase } from './application/analyze-incident-image.usecase.js';
 import { SubmitAnomalyFeedbackUseCase } from './application/submit-anomaly-feedback.usecase.js';
-import { createIncidentSchema } from './incident.schema.js';
+import { AcknowledgeIncidentUseCase } from './application/acknowledge-incident.usecase.js';
+import { AddIncidentEvidenceUseCase } from './application/add-incident-evidence.usecase.js';
+import { UpdateIncidentEvidenceStatusUseCase } from './application/update-incident-evidence-status.usecase.js';
+import { RejectIncidentResolutionUseCase } from './application/reject-incident-resolution.usecase.js';
+import { ApproveIncidentResolutionUseCase } from './application/approve-incident-resolution.usecase.js';
+import { CloseIncidentUseCase } from './application/close-incident.usecase.js';
+import {
+  addIncidentEvidenceSchema,
+  assignIncidentSchema,
+  createIncidentSchema,
+  rejectResolutionSchema,
+  updateEvidenceStatusSchema,
+  updateIncidentStatusRequestSchema
+} from './incident.schema.js';
 import { z } from 'zod';
 
 export class IncidentController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const ctx = RequestContextResolver.resolve(req);
-      const { status, type, limit, cursor, view } = req.query;
+      const { status, type, limit, cursor, view, priorityOnly, severity, dateFrom, dateTo, search, assigneeId, siteId, vendorId, contractId } = req.query;
       const normalizedStatus = status ? (status as string).toUpperCase() : '';
 
       // [M-03]: Add HTTP Caching for resolved incidents (stable data)
@@ -33,7 +46,16 @@ export class IncidentController {
         cursor: cursor as string,
         view: view as string,
         sortBy: req.query.sortBy as string,
-        sortOrder: (req.query.sortOrder as 'asc' | 'desc') || 'desc'
+        sortOrder: (req.query.sortOrder as 'asc' | 'desc') || 'desc',
+        priorityOnly: priorityOnly === 'true',
+        severity: severity as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+        search: search as string,
+        assigneeId: assigneeId as string,
+        siteId: siteId as string,
+        vendorId: vendorId as string,
+        contractId: contractId as string,
       });
       return res.json(result);
     } catch (err: any) {
@@ -59,14 +81,20 @@ export class IncidentController {
 
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = createIncidentSchema.parse(req.body);
+      const data = createIncidentSchema.parse({
+        ...req.body,
+        severity: typeof req.body?.severity === 'string' ? req.body.severity.toUpperCase() : req.body?.severity
+      });
       const ctx = RequestContextResolver.resolve(req);
       
       const useCase = new CreateIncidentUseCase();
       const incident = await useCase.execute(ctx, {
         ...data,
         imageUri: data.imageUri || undefined,
-        location: data.location || undefined
+        location: data.location || undefined,
+        vendorId: data.vendorId || undefined,
+        contractId: data.contractId || undefined,
+        siteId: data.siteId || undefined
       });
 
       return res.json(incident);
@@ -79,7 +107,7 @@ export class IncidentController {
   static async assign(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
-      const { staffId } = req.body;
+      const { staffId } = assignIncidentSchema.parse(req.body);
       const ctx = RequestContextResolver.resolve(req);
 
       const useCase = new AssignIncidentUseCase();
@@ -94,13 +122,7 @@ export class IncidentController {
 
   static async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      // Validate schema in-line for status update
-      const validateSchema = z.object({
-        status: z.string(),
-        resolutionNotes: z.string().optional().nullable(),
-        resolutionImages: z.array(z.string()).optional()
-      });
-      const data = validateSchema.parse(req.body);
+      const data = updateIncidentStatusRequestSchema.parse(req.body);
 
       const id = req.params.id as string;
       const ctx = RequestContextResolver.resolve(req);
@@ -111,11 +133,114 @@ export class IncidentController {
         id,
         status: data.status,
         resolutionNotes: data.resolutionNotes || undefined,
-        resolutionImages: data.resolutionImages
+        resolutionImages: data.resolutionImages,
+        reopenReason: data.reopenReason || undefined,
+        requiredNextAction: data.requiredNextAction || undefined
       });
       return res.json(incident);
     } catch (err: any) {
       logger.error({ err }, 'Failed to update incident status');
+      return next(err);
+    }
+  }
+
+  static async acknowledge(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = z.object({ notes: z.string().max(2000).optional().nullable() }).parse(req.body);
+      const ctx = RequestContextResolver.resolve(req);
+      const useCase = new AcknowledgeIncidentUseCase();
+      const incident = await useCase.execute(ctx, { incidentId: id, notes: data.notes });
+      return res.json(incident);
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to acknowledge incident');
+      return next(err);
+    }
+  }
+
+  static async addEvidence(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = addIncidentEvidenceSchema.parse(req.body);
+      const ctx = RequestContextResolver.resolve(req);
+      const useCase = new AddIncidentEvidenceUseCase();
+      const evidence = await useCase.execute(ctx, {
+        incidentId: id,
+        kind: data.kind,
+        uri: data.uri || undefined,
+        sourceType: data.sourceType,
+        sourceId: data.sourceId || undefined,
+        fileType: data.fileType || undefined,
+        fileUrl: data.fileUrl || undefined,
+        thumbnailUrl: data.thumbnailUrl || undefined,
+        capturedAt: data.capturedAt || undefined,
+        gpsLat: data.gpsLat ?? undefined,
+        gpsLng: data.gpsLng ?? undefined,
+        checksum: data.checksum || undefined,
+        note: data.note || undefined,
+        metadata: data.metadata || undefined
+      });
+
+      return res.status(201).json(evidence);
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to add incident evidence');
+      return next(err);
+    }
+  }
+
+  static async updateEvidenceStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const evidenceId = req.params.evidenceId as string;
+      const data = updateEvidenceStatusSchema.parse(req.body);
+      const ctx = RequestContextResolver.resolve(req);
+      const useCase = new UpdateIncidentEvidenceStatusUseCase();
+      const evidence = await useCase.execute(ctx, { incidentId: id, evidenceId, status: data.status, note: data.note });
+      return res.json(evidence);
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to update incident evidence status');
+      return next(err);
+    }
+  }
+
+  static async rejectResolution(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = rejectResolutionSchema.parse(req.body);
+      const ctx = RequestContextResolver.resolve(req);
+      const useCase = new RejectIncidentResolutionUseCase();
+      const incident = await useCase.execute(ctx, { incidentId: id, reopenReason: data.reopenReason, requiredNextAction: data.requiredNextAction });
+      return res.json(incident);
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to reject incident resolution');
+      return next(err);
+    }
+  }
+
+  static async approveResolution(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = z.object({ notes: z.string().max(2000).optional().nullable() }).parse(req.body);
+      const ctx = RequestContextResolver.resolve(req);
+      const useCase = new ApproveIncidentResolutionUseCase();
+      const incident = await useCase.execute(ctx, { incidentId: id, notes: data.notes });
+      return res.json(incident);
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to approve incident resolution');
+      return next(err);
+    }
+  }
+
+  static async close(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = z.object({ notes: z.string().max(2000).optional().nullable() }).parse(req.body);
+      const ctx = RequestContextResolver.resolve(req);
+      const useCase = new CloseIncidentUseCase();
+      const incident = await useCase.execute(ctx, { incidentId: id, notes: data.notes });
+      return res.json(incident);
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to close incident');
       return next(err);
     }
   }
@@ -161,4 +286,3 @@ export class IncidentController {
     }
   }
 }
-

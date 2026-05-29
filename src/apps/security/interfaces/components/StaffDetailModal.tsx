@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../../lib/utils';
 import type { Staff } from '../types';
-import { getDisplayName, getRoleInfo, getStatusInfo, fmtDate } from '../StaffTab.utils.js';
+import { getDisplayName, getDisplayStaffCode, getRoleInfo, getStatusInfo, fmtDate } from '../StaffTab.utils.js';
 import { StaffReputationBadge } from './StaffReputationBadge.js';
 import { StaffPerformancePortfolio } from './StaffPerformancePortfolio';
 
@@ -78,7 +78,7 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                   <span className={cn('text-[10px] font-black uppercase tracking-widest', status.color)}>{status.label}</span>
                 </div>
                 <span className="font-mono text-[10px] text-scmd-primary bg-scmd-primary/5 px-2 py-0.5 rounded border border-scmd-primary/20 font-black">
-                  #{s.staffId}
+                  #{getDisplayStaffCode(s)}
                 </span>
               </div>
             </div>
@@ -249,7 +249,7 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                           </div>
                           <p className="text-[11px] font-bold text-scmd-primary uppercase tracking-widest mb-2">{work.company}</p>
                           {work.description && (
-                            <p className="text-[11px] text-scmd-silver/40 font-medium leading-relaxed italic">
+                            <p className="text-[11px] text-scmd-silver/40 font-medium leading-relaxed not-italic">
                               {work.description}
                             </p>
                           )}

@@ -11,8 +11,10 @@ export const SCMDCard = React.forwardRef<HTMLDivElement, SCMDCardProps>(
       <div
         ref={ref}
         className={cn(
-          'rounded-scmd-lg p-6 transition-all duration-300',
-          glass ? 'scmd-glass' : 'bg-scmd-slate border border-white/5 shadow-scmd-deep',
+          'rounded-[14px] p-4 transition-colors duration-150 sm:p-5',
+          glass
+            ? 'border border-slate-200/10 bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl hover:border-blue-400/18 hover:bg-white/[0.05]'
+            : 'border border-slate-200/10 bg-slate-900/70 shadow-[0_10px_24px_rgba(2,6,23,0.16)]',
           className
         )}
         {...props}

@@ -6,13 +6,16 @@ import { CacheManager } from '../../../core/cache/manager.js';
 
 export class DeleteStaffUseCase extends BaseUseCase<string, void> {
   protected async authorize(context: SecurityContext): Promise<void> {
-    if (context.role !== UserRole.TENANT_ADMIN && context.role !== UserRole.SUPER_ADMIN) {
+    if (context.role !== UserRole.TENANT_ADMIN && context.role !== UserRole.SUPER_ADMIN && context.role !== UserRole.VENDOR_COMMANDER) {
       throw new Error('FORBIDDEN_ACTION');
     }
   }
 
   protected async internalExecute(context: SecurityContext, id: string): Promise<void> {
     const existing = await StaffRepository.getEntityById(context, id);
+    if (context.role === UserRole.VENDOR_COMMANDER && existing && existing.role !== UserRole.GUARD) {
+      throw new Error('VENDOR_COMMANDER_CAN_ONLY_DELETE_GUARDS');
+    }
 
     await StaffRepository.delete(context, id);
     

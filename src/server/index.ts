@@ -13,16 +13,35 @@ import { createServer } from 'http';
 import { logger } from './core/logger/index.js';
 import { initRedis, initBullRedis, disconnectAllRedis } from './infra/redis/client.js';
 import { db } from './core/db/prisma.js';
+import { validateContactLeadChallengeConfig } from './modules/public/contact-lead.controller.js';
+import { validateProductionSecrets } from './bootstrap/production-secret-validation.js';
+import { normalizeServiceType, servesPublicHttpApi, servesRealtimeGateway } from './bootstrap/service-profile.js';
 
 // ─────────────────────────────────────────────────────────────
 // 🚀 BOOTSTRAP
 // ─────────────────────────────────────────────────────────────
 async function bootstrap() {
-  const SERVICE_TYPE = process.env.SERVICE_TYPE || 'ALL';
+  const SERVICE_TYPE = normalizeServiceType(process.env.SERVICE_TYPE);
   // Ensure PORT is always 3000 per constraints
   const PORT = 3000;
 
   logger.info({ SERVICE_TYPE }, '🚀 Starting SCMD system');
+
+  try {
+    validateProductionSecrets();
+  } catch (err) {
+    logger.error({ err }, '❌ Production secret configuration is invalid — aborting');
+    process.exit(1);
+  }
+
+  if (servesPublicHttpApi(SERVICE_TYPE)) {
+    try {
+      validateContactLeadChallengeConfig();
+    } catch (err) {
+      logger.error({ err }, '❌ Public contact lead challenge configuration is invalid — aborting');
+      process.exit(1);
+    }
+  }
 
   // ── STEP 0: START PDF SERVICE (MANAGED MICROSERVICE) ──────────
   if (process.env.NODE_ENV !== 'production' && SERVICE_TYPE === 'ALL') {
@@ -145,7 +164,7 @@ async function bootstrap() {
   });
 
   // ── STEP 5: REALTIME ────────────────────────────────────────
-  if (SERVICE_TYPE === 'REALTIME' || SERVICE_TYPE === 'ALL') {
+  if (servesRealtimeGateway(SERVICE_TYPE)) {
     try {
       const { SocketService } = await import('./infra/socket/service.js');
       await SocketService.init(httpServer);

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import AppRouter from './routes/AppRouter';
 import { SyncManager } from './lib/sync-manager';
-import { Toaster } from 'react-hot-toast';
+import { GlobalToastViewport } from './lib/toast';
 
 export default function App() {
   useEffect(() => {
@@ -21,7 +21,7 @@ export default function App() {
   return (
     <AuthProvider>
       <div className="min-h-screen relative bg-scmd-navy">
-        <Toaster position="top-right" />
+        <GlobalToastViewport />
         <AppRouter />
       </div>
     </AuthProvider>

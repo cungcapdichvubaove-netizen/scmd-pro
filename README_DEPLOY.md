@@ -46,4 +46,4 @@ SEED_GUARD_PASSWORD=GuardPass!
 npm run seed
 ```
 
-*Lưu ý: Nếu không đặt biến môi trường, hệ thống sẽ sử dụng mật khẩu mặc định (Chỉ dùng cho môi trường Lab). Trên production, tuyệt đối không được bỏ trống.*
+*Lưu ý bảo mật: Với `NODE_ENV=production`, seed sẽ fail-fast nếu `SEED_SUPERADMIN_PASSWORD` thiếu hoặc chỉ chứa khoảng trắng. Mật khẩu mặc định chỉ được phép tồn tại cho dev/test/lab. Sau lần đăng nhập production đầu tiên, bắt buộc đổi/rotate mật khẩu superadmin seed và lưu bằng quy trình quản lý secret nội bộ.*

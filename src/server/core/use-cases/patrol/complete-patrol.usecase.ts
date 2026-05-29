@@ -1,8 +1,10 @@
+import { z } from 'zod';
 import { BaseUseCase } from '../../architecture/usecase.js';
 import { SecurityContext, LocationDTO, UserRole } from '../../architecture/types.js';
 import { PatrolRepository } from '../../../modules/patrol/repositories/patrol.repository.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { logger } from '../../logger/index.js';
+import { BadRequestError } from '../../errors/domain.error.js';
 
 export interface CheckItemData {
   id: string;
@@ -37,6 +39,39 @@ export interface CompletePatrolResponse {
 
 import { AttendanceCheckOutUseCase } from '../attendance/check-out.usecase.js';
 
+const completePatrolRequestSchema = z.object({
+  checkpointId: z.string().min(1),
+  location: z.object({
+    lat: z.number(),
+    lon: z.number(),
+    accuracy: z.number().optional(),
+  }).optional(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+  checkItemsData: z.array(z.object({
+    id: z.string().min(1),
+    checked: z.boolean(),
+    note: z.string().max(1000).optional(),
+    photoUri: z.string().max(2048).optional(),
+  })).optional(),
+  anomaly: z.object({
+    type: z.string().min(1),
+    description: z.string().max(2000).optional(),
+  }).catchall(z.unknown()).optional(),
+  deviceId: z.string().max(255).optional(),
+  _signature: z.string().max(2048).optional(),
+  _timestamp: z.string().datetime().optional(),
+  isShiftEnd: z.boolean().optional(),
+}).superRefine((data, ctx) => {
+  if (new Date(data.endTime).getTime() < new Date(data.startTime).getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'endTime phải lớn hơn hoặc bằng startTime',
+      path: ['endTime'],
+    });
+  }
+});
+
 export class CompletePatrolUseCase extends BaseUseCase<CompletePatrolRequest, CompletePatrolResponse> {
   protected async authorize(context: SecurityContext): Promise<void> {
     const allowedRoles = [UserRole.GUARD, UserRole.SUPERVISOR, UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN];
@@ -45,36 +80,44 @@ export class CompletePatrolUseCase extends BaseUseCase<CompletePatrolRequest, Co
     }
   }
 
+  protected override async validate(data: CompletePatrolRequest): Promise<void> {
+    const validated = completePatrolRequestSchema.safeParse(data);
+    if (!validated.success) {
+      throw new BadRequestError(`Dữ liệu hoàn thành tuần tra không hợp lệ: ${validated.error.errors.map((issue) => issue.message).join(', ')}`);
+    }
+  }
+
   protected async internalExecute(context: SecurityContext, data: CompletePatrolRequest): Promise<CompletePatrolResponse> {
     try {
+      const validated = completePatrolRequestSchema.parse(data);
       // 1. Verify location if coords provided
       let isLocationValid = true;
-      if (data.location) {
+      if (validated.location) {
         isLocationValid = await PatrolRepository.verifyGuardLocation(
           context.tenantId,
-          data.checkpointId,
-          data.location.lat,
-          data.location.lon
+          validated.checkpointId,
+          validated.location.lat,
+          validated.location.lon
         );
         if (!isLocationValid) {
-          logger.warn({ context, checkpointId: data.checkpointId }, 'FRAUD_DETECTED: Guard completed patrol while too far from checkpoint');
+          logger.warn({ context, checkpointId: validated.checkpointId }, 'FRAUD_DETECTED: Guard completed patrol while too far from checkpoint');
         }
       }
 
       // 2. Save log to PG
       const log = await PatrolRepository.createLog(
         context,
-        data.checkpointId,
+        validated.checkpointId,
         {
-          startTime: data.startTime,
-          endTime: data.endTime,
-          checkItems: data.checkItemsData,
-          anomaly: data.anomaly ?? (!isLocationValid ? 'LOCATION_MISMATCH_FRAUD' : null),
+          startTime: validated.startTime,
+          endTime: validated.endTime,
+          checkItems: validated.checkItemsData,
+          anomaly: validated.anomaly ?? (!isLocationValid ? 'LOCATION_MISMATCH_FRAUD' : null),
           status: !isLocationValid ? 'danger' : 'ok',
-          location: data.location,
-          deviceId: data.deviceId,
-          offlineSignature: data._signature,
-          offlineTimestamp: data._timestamp,
+          location: validated.location,
+          deviceId: validated.deviceId,
+          offlineSignature: validated._signature,
+          offlineTimestamp: validated._timestamp,
           syncTime: new Date().toISOString()
         }
       );
@@ -82,30 +125,25 @@ export class CompletePatrolUseCase extends BaseUseCase<CompletePatrolRequest, Co
       const logId = (log as { id: string }).id;
 
       // 3. If isShiftEnd is requested, trigger automatic Check-out
-      if (data.isShiftEnd) {
+      if (validated.isShiftEnd) {
         const checkOutUseCase = new AttendanceCheckOutUseCase();
-        try {
-          await checkOutUseCase.execute(context, {
-            location: data.location,
-            notes: `Tự động đóng ca sau khi hoàn thành tuần tra tại trạm ${data.checkpointId}`
-          });
-          logger.info({ staffId: context.userId }, 'Shift auto-closed via Patrol Report');
-        } catch (err) {
-          // If already checked out or other error, log it but don't fail the patrol completion
-          logger.warn({ staffId: context.userId, err }, 'Failed to auto-close shift during patrol completion');
-        }
+        await checkOutUseCase.execute(context, {
+          location: validated.location,
+          notes: `Tự động đóng ca sau khi hoàn thành tuần tra tại trạm ${validated.checkpointId}`
+        });
+        logger.info({ staffId: context.userId }, 'Shift auto-closed via Patrol Report');
       }
 
       await AuditService.log({
         userId: context.userId,
         tenantId: context.tenantId,
         action: 'PATROL_COMPLETE',
-        resource: `patrol/checkpoint/${data.checkpointId}`,
+        resource: `patrol/checkpoint/${validated.checkpointId}`,
         payload: {
           logId,
-          checkpointId: data.checkpointId,
+          checkpointId: validated.checkpointId,
           locationValid: isLocationValid,
-          hasAnomaly: !!data.anomaly || !isLocationValid
+          hasAnomaly: !!validated.anomaly || !isLocationValid
         },
         status: isLocationValid ? 'SUCCESS' : 'WARNING'
       });

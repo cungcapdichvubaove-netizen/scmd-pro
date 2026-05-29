@@ -111,9 +111,15 @@ export class IdempotencyService {
  * Enhanced in v4.33.30 with dynamic TTL and DB-backed persistence.
  */
 export const idempotency = async (req: Request, res: Response, next: NextFunction) => {
-  const key = req.headers['x-idempotency-key'] as string;
+  const rawKey = req.headers['x-idempotency-key'] as string;
   
-  if (!key) return next();
+  if (!rawKey) return next();
+
+  // [FIX M-03]: Scope key theo tenantId để tránh cross-tenant collision.
+  // Trước đây key = rawKey → 2 tenant dùng cùng UUID (hoặc client cố ý) → tenant B
+  // nhận cached response của tenant A. Dùng tenantId từ req.user (đã verify bởi requireAuth).
+  const tenantId = (req as any).user?.tenantId || (req as any).subdomain || 'unknown';
+  const key = `${tenantId}:${rawKey}`;
 
   const path = req.originalUrl;
   const lockTtl = IdempotencyService.getLockTTL(path);

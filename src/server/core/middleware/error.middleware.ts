@@ -2,15 +2,27 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../logger/index.js';
 import { metrics } from '../metrics.js';
 
+function canExposeUnhandledErrorMessage() {
+  const appUrl = process.env.APP_URL || '';
+  const appEnv = (process.env.APP_ENV || process.env.VITE_APP_ENV || '').toLowerCase();
+  return process.env.NODE_ENV !== 'production' ||
+    appEnv === 'local' ||
+    appEnv === 'development' ||
+    appUrl.startsWith('http://localhost') ||
+    appUrl.startsWith('http://127.0.0.1');
+}
+
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
   let status = err.status || err.statusCode || 500;
   let message = err.message || 'Internal Server Error';
   let errorCode = err.code || err.name || 'UNKNOWN_ERROR';
+  let isSafeClientMessage = false;
 
   if (err.isDomainError) {
     status = err.status;
     message = err.message;
     errorCode = err.name;
+    isSafeClientMessage = true;
     logger.warn({ path: req.path, error: err.message, status }, 'Domain Error');
   } else {
     logger.error({ err, path: req.path }, 'Unhandled Exception Caught in Gateway');
@@ -44,6 +56,7 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
   // FIX C-04: Mapping Prisma errors to user-friendly messages
   // Ngăn chặn rò rỉ cấu trúc cơ sở dữ liệu qua error message
   if (err.name === 'PrismaClientKnownRequestError') {
+    isSafeClientMessage = true;
     switch (err.code) {
       case 'P2002':
         message = 'Dữ liệu đã tồn tại trong hệ thống (Duplicate entry).';
@@ -70,7 +83,9 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
 
   res.status(status).json({
     error: {
-      message: process.env.NODE_ENV === 'production' && status === 500 ? 'Internal Server Error' : message,
+      message: status >= 500 && !isSafeClientMessage && !canExposeUnhandledErrorMessage()
+        ? 'Internal Server Error'
+        : message,
       code: errorCode,
       traceId: res.getHeader('x-trace-id') || req.headers['x-trace-id'] // Include trace ID in error response
     }

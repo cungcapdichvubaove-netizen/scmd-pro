@@ -8,21 +8,30 @@ export default {
     extend: {
       colors: {
         // Hệ thống màu nhận diện thương hiệu SCMD PRO Brand Identity v2.4
-        'scmd-navy': 'var(--color-header)',       // Nền chính trung tâm chỉ huy
-        'scmd-slate': 'var(--color-surface)',     // Màu các khối Card/Component
-        'scmd-cyber': 'var(--color-primary)',     // Xanh hành động, phản quang
-        'scmd-safety': 'var(--color-success)',    // Xanh an toàn
-        'scmd-alert': 'var(--color-danger)',      // Đỏ báo động
+        'scmd-navy':    'var(--color-header)',          // Nền chính trung tâm chỉ huy
+        'scmd-slate':   'var(--color-surface)',         // Màu các khối Card/Component
+        'scmd-surface': 'var(--color-surface)',         // Alias: bg panel / card surface
+        'scmd-admin-panel': 'var(--color-admin-panel)',    // Super Admin analytics panels (#151B2D)
+        'scmd-admin-rail': 'var(--color-admin-rail)',      // Super Admin billing rail/table surface (#112240)
+        'scmd-admin-sidebar': 'var(--color-admin-sidebar)', // Super Admin sidebar/elevated surface (#1A2133)
+        'scmd-admin-text-muted': 'var(--color-text-secondary)', // Super Admin muted light text (#CCD6F6)
+        'scmd-cyber':   'var(--color-primary)',         // Xanh hành động, phản quang
+        'scmd-safety':  'var(--color-success)',         // Xanh an toàn
+        'scmd-alert':   'var(--color-danger)',          // Đỏ báo động
+        'scmd-silver':  'var(--color-text-secondary)',  // Bạc phụ, text muted
+        'scmd-danger':  'var(--color-danger)',          // Đỏ nguy hiểm (alias scmd-alert)
+        'scmd-warning': 'var(--color-warning)',         // Vàng cảnh báo
+        'scmd-accent':  'var(--color-primary-accent)',  // Xanh accent nhạt
 
-        'scmd-primary': 'var(--color-primary)',   
-        'scmd-success': 'var(--color-success)',   
-        'scmd-error':   'var(--color-danger)',    
+        'scmd-primary': 'var(--color-primary)',
+        'scmd-success': 'var(--color-success)',
+        'scmd-error':   'var(--color-danger)',
 
-        primary: "var(--color-primary)",
+        primary:    "var(--color-primary)",
         background: "var(--color-bg)",
-        surface: "var(--color-surface)",
-        success: "var(--color-success)",
-        danger: "var(--color-danger)",
+        surface:    "var(--color-surface)",
+        success:    "var(--color-success)",
+        danger:     "var(--color-danger)",
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],

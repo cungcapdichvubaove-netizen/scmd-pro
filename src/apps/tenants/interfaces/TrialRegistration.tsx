@@ -118,9 +118,9 @@ export const TrialRegistration: React.FC<TrialRegistrationProps> = ({ onBack, on
 
           <div className="space-y-6">
             {[
-              { icon: Zap, title: "Zero Friction", desc: "Khởi tạo không gian làm việc chỉ trong 60 giây." },
-              { icon: Lock, title: "Zero Risk", desc: "Không cần thẻ tín dụng. Không cam kết ẩn." },
-              { icon: ShieldCheck, title: "Zero Doubt", desc: "Minh bạch hóa 100% hoạt động an ninh của bạn." }
+              { icon: Zap, title: "Khởi tạo nhanh", desc: "Khởi tạo không gian làm việc chỉ trong 60 giây." },
+              { icon: Lock, title: "An tâm triển khai", desc: "Không cần thẻ tín dụng. Không cam kết ẩn." },
+              { icon: ShieldCheck, title: "Minh bạch tuyệt đối", desc: "Minh bạch hóa 100% hoạt động an ninh của bạn." }
             ].map((item, i) => (
               <div key={i} className="flex gap-4 items-start">
                 <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700">
@@ -180,13 +180,13 @@ export const TrialRegistration: React.FC<TrialRegistrationProps> = ({ onBack, on
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email công việc</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email công tác</label>
                     <div className="relative">
                       <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 w-4 h-4" />
                       <input 
                         required
                         type="email"
-                        placeholder="name@company.com"
+                        placeholder="tenban@doanhnghiep.vn"
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
                         value={formData.email}
                         onChange={(e) => setFormData({...formData, email: e.target.value})}
@@ -241,13 +241,13 @@ export const TrialRegistration: React.FC<TrialRegistrationProps> = ({ onBack, on
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Đường dẫn Workspace</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Đường dẫn không gian làm việc</label>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <input 
                         required
                         type="text"
-                        placeholder="your-company"
+                        placeholder="ten-doanh-nghiep"
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors text-right"
                         value={formData.subdomain}
                         onChange={handleSubdomainChange}
@@ -262,7 +262,7 @@ export const TrialRegistration: React.FC<TrialRegistrationProps> = ({ onBack, on
                   type="submit"
                   className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-all shadow-lg shadow-blue-600/20 mt-4 flex items-center justify-center gap-2 group active:scale-95"
                 >
-                  Khởi tạo Workspace
+                  Khởi tạo không gian làm việc
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </form>
@@ -280,7 +280,7 @@ export const TrialRegistration: React.FC<TrialRegistrationProps> = ({ onBack, on
                     <CheckCircle2 size={14} className="absolute text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
-                    Tôi đã đọc, hiểu rò và đồng ý tuân thủ toàn bộ các quy định tại <a href="/docs/EULA.md" target="_blank" className="text-blue-400 hover:text-blue-300 underline font-bold transition-colors">Điều khoản dịch vụ & Thỏa Thuận Cấp Phép SCMD Pro (EULA)</a>. Tôi cam kết không sử dụng hệ thống cho mục đích sao chép, dịch ngược hoặc thương mại hóa chéo.
+                    Tôi đã đọc, hiểu rõ và đồng ý tuân thủ toàn bộ các quy định tại <a href="/docs/EULA.md" target="_blank" className="text-blue-400 hover:text-blue-300 underline font-bold transition-colors">Điều khoản dịch vụ và Thỏa thuận cấp phép SCMD Pro (EULA)</a>. Tôi cam kết không sử dụng hệ thống cho mục đích sao chép, dịch ngược hoặc thương mại hóa chéo.
                   </p>
                 </label>
               </div>
@@ -338,7 +338,7 @@ export const TrialRegistration: React.FC<TrialRegistrationProps> = ({ onBack, on
 
               <h3 className="text-3xl font-black text-white mb-4 tracking-tight">Sẵn sàng bảo vệ!</h3>
               <p className="text-slate-400 mb-12 leading-relaxed">
-                Workspace <span className="text-white font-bold">{formData.subdomain}.scmdpro.com</span> đã được kích hoạt thành công.
+                Không gian làm việc <span className="text-white font-bold">{formData.subdomain}.scmdpro.com</span> đã được kích hoạt thành công.
                 Thông tin đăng nhập đã được gửi tới email của bạn.
               </p>
 
@@ -346,7 +346,7 @@ export const TrialRegistration: React.FC<TrialRegistrationProps> = ({ onBack, on
                 onClick={() => onSuccess(formData.subdomain)}
                 className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 group active:scale-95"
               >
-                Truy cập Workspace ngay
+                Truy cập không gian làm việc ngay
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
             </motion.div>

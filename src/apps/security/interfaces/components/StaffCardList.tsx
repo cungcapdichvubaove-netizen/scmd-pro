@@ -6,13 +6,12 @@ import {
   Phone, 
   Calendar, 
   Eye, 
-  Edit3, 
-  Trash2,
-  Loader2
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { cn } from '../../../../lib/utils';
 import type { Staff } from '../types';
-import { getDisplayName, getRoleInfo, getStatusInfo, fmtDate } from '../StaffTab.utils.js';
+import { getDisplayName, getDisplayStaffCode, getRoleInfo, getStatusInfo, fmtDate } from '../StaffTab.utils.js';
 
 interface StaffCardListProps {
   pagedStaff: Staff[];
@@ -38,9 +37,28 @@ export const StaffCardList: React.FC<StaffCardListProps> = ({
   return (
     <div className="md:hidden space-y-4 p-4 max-h-[65vh] overflow-y-auto no-scrollbar border-t border-white/5">
       {isLoading && staff.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-50">
-          <Loader2 className="animate-spin text-scmd-primary" size={32} />
-          <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">Đang tải dữ liệu nhân sự...</p>
+        <div className="space-y-4" aria-label="Đang tải dữ liệu nhân sự">
+          {Array.from({ length: Math.min(itemsPerPage, 4) }).map((_, idx) => (
+            <div key={`staff-card-skeleton-${idx}`} className="bg-scmd-navy/40 border border-white/5 rounded-3xl p-5 space-y-4 animate-pulse">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-scmd-navy" />
+                <div className="space-y-3 flex-1">
+                  <div className="h-4 w-2/3 rounded bg-scmd-navy" />
+                  <div className="h-3 w-1/3 rounded bg-scmd-navy/60" />
+                </div>
+                <div className="h-6 w-16 rounded-lg bg-scmd-navy/60" />
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/[0.03]">
+                <div className="h-12 rounded-xl bg-scmd-navy/50" />
+                <div className="h-12 rounded-xl bg-scmd-navy/50" />
+              </div>
+              <div className="flex justify-end gap-2 pt-4 border-t border-white/[0.03]">
+                <div className="w-10 h-10 rounded-xl bg-scmd-navy/60" />
+                <div className="w-10 h-10 rounded-xl bg-scmd-navy/60" />
+                <div className="w-10 h-10 rounded-xl bg-scmd-navy/60" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <AnimatePresence mode="popLayout">
@@ -77,7 +95,7 @@ export const StaffCardList: React.FC<StaffCardListProps> = ({
                   </div>
                   <div className="min-w-0 pr-12">
                     <h4 className="font-black text-white uppercase text-sm leading-tight truncate">{displayName}</h4>
-                    <p className="text-[10px] font-black text-scmd-primary font-mono tracking-widest mt-1"># {s.staffId}</p>
+                    <p className="text-[10px] font-black text-scmd-primary font-mono tracking-widest mt-1"># {getDisplayStaffCode(s)}</p>
                   </div>
                 </div>
 

@@ -7,13 +7,14 @@ import { signData } from '../../../../lib/crypto';
 import { apiFetch } from '../../../../lib/api.js';
 import { analyzePatrolAnomaly } from '../../../../services/ai-proxy.service';
 import { validateGPSTrajectory, isMockedPosition } from '../../../../shared/utils/edge-validation.js';
-import socket from '../../../../lib/socket';
+import { getSocket } from '../../../../lib/socket';
 
 export const usePatrolDashboardState = () => {
   const setPatrolLocation = useDashboardStore((s: any) => s.setPatrolLocation);
   const setActiveCheckpoint = useDashboardStore((s: any) => s.setActiveCheckpoint);
   const setPatrolOfflineStatus = useDashboardStore((s: any) => s.setPatrolOfflineStatus);
   const setPatrolPendingCount = useDashboardStore((s: any) => s.setPatrolPendingCount);
+  const setPatrolFailedSyncCount = useDashboardStore((s: any) => s.setPatrolFailedSyncCount);
   const setPatrolTimes = useDashboardStore((s: any) => s.setPatrolTimes);
   const setNocFeed = useDashboardStore((s: any) => s.setNocFeed);
 
@@ -41,7 +42,8 @@ export const usePatrolDashboardState = () => {
 
   // Socket.io Listeners for real-time updates
   useEffect(() => {
-    socket.emit('join_tenant', tenantId);
+    let cancelled = false;
+    let activeSocket: Awaited<ReturnType<typeof getSocket>> | null = null;
 
     const onPatrolUpdate = (data: any) => {
       // If our current route is updated by someone else, we might want to refresh
@@ -58,10 +60,22 @@ export const usePatrolDashboardState = () => {
       ]);
     };
 
-    socket.on('patrol_update', onPatrolUpdate);
+    const bindSocketEvents = async () => {
+      const socket = await getSocket();
+      if (cancelled) {
+        return;
+      }
+
+      activeSocket = socket;
+      socket.emit('join_tenant', tenantId);
+      socket.on('patrol_update', onPatrolUpdate);
+    };
+
+    void bindSocketEvents();
     
     return () => {
-      socket.off('patrol_update', onPatrolUpdate);
+      cancelled = true;
+      activeSocket?.off('patrol_update', onPatrolUpdate);
     };
   }, [tenantId, setNocFeed]);
 
@@ -81,13 +95,14 @@ export const usePatrolDashboardState = () => {
 
   useEffect(() => {
     return SyncManager.subscribe((status) => {
-      setPatrolPendingCount(status.pending);
+      setPatrolPendingCount(status.total);
+      setPatrolFailedSyncCount(status.failed);
       setIsSyncing(status.syncing);
       if (status.lastError) {
         console.error("[Sync] Manager reported error:", status.lastError);
       }
     });
-  }, [setPatrolPendingCount]);
+  }, [setPatrolFailedSyncCount, setPatrolPendingCount]);
 
   const playBeep = useCallback((type: 'success' | 'error') => {
     try {

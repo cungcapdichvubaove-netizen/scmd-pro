@@ -3,6 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { TenantLogin } from '../apps/tenants/interfaces/TenantLogin';
 import { useAuth } from '../context/AuthContext';
 
+const resolveRoleHome = (role: string | null | undefined) => {
+  if (role === 'super-admin') return '/super-admin/dashboard';
+  if (role === 'tenant-admin') return '/admin/dashboard';
+  if (role === 'guard') return '/guard/app';
+  if (role === 'vendor-commander') return '/vendor-commander/workspace';
+  return null;
+};
+
+const ensureDeviceSecret = () => {
+  if (localStorage.getItem('scmd_device_secret')) return;
+
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const secret = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  localStorage.setItem('scmd_device_secret', `DS_${secret}`);
+};
+
 export default function LoginPage() {
   const { login, role, isLoading } = useAuth();
   const navigate = useNavigate();
@@ -15,30 +32,28 @@ export default function LoginPage() {
 
     // Scenario A: user vừa bấm login → navigate đến dashboard đúng role
     if (justLoggedIn.current && role) {
-      if (role === 'super-admin') navigate('/super-admin/dashboard', { replace: true });
-      else if (role === 'tenant-admin') navigate('/admin/dashboard', { replace: true });
-      else if (role === 'guard') navigate('/guard/app', { replace: true });
+      const home = resolveRoleHome(role);
+      if (home) navigate(home, { replace: true });
       return;
     }
 
     // Scenario B: user đã có session hợp lệ, vào /login → redirect thẳng về dashboard
     if (!justLoggedIn.current && role) {
-      if (role === 'super-admin') navigate('/super-admin/dashboard', { replace: true });
-      else if (role === 'tenant-admin') navigate('/admin/dashboard', { replace: true });
-      else if (role === 'guard') navigate('/guard/app', { replace: true });
+      const home = resolveRoleHome(role);
+      if (home) navigate(home, { replace: true });
     }
-  }, [role, isLoading]);
+  }, [role, isLoading, navigate]);
 
   const handleLoginSuccess = (userData: any) => {
     // FIX: Super-admin luôn thuộc 'tenant_system' (SYSTEM_TENANT_ID).
     const resolvedTenantId = userData.tenantId || (userData.role === 'super-admin' ? 'tenant_system' : undefined);
+    ensureDeviceSecret();
     justLoggedIn.current = true;
     login({
-      token: userData.token,
       role: userData.role,
       tenantId: resolvedTenantId,
       name: userData.fullName || userData.name,
-      staffId: userData.id
+      staffId: userData.staffId || userData.id
     });
     // navigate được xử lý bởi useEffect sau khi role commit vào store.
   };

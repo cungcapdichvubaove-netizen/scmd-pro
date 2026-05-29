@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../../lib/utils';
 import type { Staff } from '../types';
-import { getDisplayName, getRoleInfo, getStatusInfo, fmtDate } from '../StaffTab.utils.js';
+import { getDisplayName, getDisplayStaffCode, getRoleInfo, getStatusInfo, fmtDate } from '../StaffTab.utils.js';
 
 interface StaffTableProps {
   pagedStaff: Staff[];
@@ -131,7 +131,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="font-mono text-[9px] font-black text-scmd-primary/80 bg-scmd-primary/5 px-2 py-0.5 rounded border border-scmd-primary/10 tracking-widest leading-none">
-                              # {s.staffId}
+                              # {getDisplayStaffCode(s)}
                             </span>
                           </div>
                         </div>

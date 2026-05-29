@@ -1,257 +1,126 @@
-import React from 'react';
-import { 
-  TrendingUp, 
-  Users, 
-  MapPin, 
-  DollarSign,
-  ArrowUpRight,
-  Target,
-  Globe,
-  Zap
-} from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell
-} from 'recharts';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Activity, BarChart3, Building2, RefreshCcw, TrendingUp } from 'lucide-react';
 import { SCMDCard } from '../../common/interfaces/components/SCMDCard';
+import { apiFetch } from '../../../lib/api';
 
-const data = [
-  { month: 'Jan', tenants: 12, revenue: 45000 },
-  { month: 'Feb', tenants: 15, revenue: 52000 },
-  { month: 'Mar', tenants: 18, revenue: 61000 },
-  { month: 'Apr', tenants: 24, revenue: 85000 },
-  { month: 'May', tenants: 32, revenue: 110000 },
-];
+type GrowthSnapshot = {
+  tenants?: number;
+  sites?: number;
+  mrr?: number;
+  retentionRate?: number;
+  trends?: Array<{ label: string; tenants?: number; revenue?: number }>;
+  sectors?: Array<{ name: string; value: number }>;
+};
 
-const sectorData = [
-  { name: 'Industrial', value: 40, color: '#2563EB' },
-  { name: 'Retail', value: 30, color: '#10B981' },
-  { name: 'Residential', value: 20, color: '#F59E0B' },
-  { name: 'Office', value: 10, color: '#EF4444' },
-];
+const formatMoney = (value?: number) => {
+  if (typeof value !== 'number') return '0 ₫';
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
+};
 
 export const MarketGrowthTab: React.FC = () => {
+  const [data, setData] = useState<GrowthSnapshot>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiFetch<GrowthSnapshot>('/api/superadmin/market-growth');
+      setData(result ?? {});
+    } catch (err) {
+      setData({});
+      setError(err instanceof Error ? err.message : 'Chưa kết nối được API market-growth.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void loadData(); }, []);
+
+  const hasTrendData = useMemo(() => Array.isArray(data.trends) && data.trends.length > 0, [data.trends]);
+  const hasSectorData = useMemo(() => Array.isArray(data.sectors) && data.sectors.length > 0, [data.sectors]);
+
   return (
     <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-scmd-primary/10 rounded-xl text-scmd-primary">
             <TrendingUp size={24} />
           </div>
           <div>
             <h1 className="text-2xl font-black text-white tracking-tight uppercase">Market Growth</h1>
-            <p className="text-scmd-silver/60 text-sm">Phân tích xu hướng và quy mô mở rộng thị trường của hệ thống SCMD Pro.</p>
+            <p className="text-scmd-silver/60 text-sm">Phân tích tăng trưởng thị trường từ dữ liệu tenant, site và doanh thu thật.</p>
           </div>
         </div>
+        <button type="button" onClick={() => void loadData()} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-4 text-xs font-bold text-scmd-silver hover:bg-white/[0.05]">
+          <RefreshCcw size={14} className={loading ? 'animate-spin' : undefined} /> Làm mới
+        </button>
       </div>
 
-      {/* KPI Grid */}
+      {error ? (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] p-4 text-sm font-semibold text-amber-100">
+          {error} Màn hình giữ nguyên cấu trúc vận hành nhưng không hiển thị số demo.
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <SCMDCard glass className="p-6">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">Tổng Tenants</p>
-              <h3 className="text-3xl font-black text-white">42</h3>
+        {[
+          { label: 'Tổng tenant', value: String(data.tenants ?? 0), icon: <Building2 size={20} /> },
+          { label: 'Site đang quản lý', value: String(data.sites ?? 0), icon: <Activity size={20} /> },
+          { label: 'MRR ghi nhận', value: formatMoney(data.mrr), icon: <BarChart3 size={20} /> },
+          { label: 'Retention', value: typeof data.retentionRate === 'number' ? `${data.retentionRate}%` : '0%', icon: <TrendingUp size={20} /> },
+        ].map((item) => (
+          <SCMDCard key={item.label} glass className="p-6">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">{item.label}</p>
+                <h3 className="text-3xl font-black text-white">{item.value}</h3>
+              </div>
+              <div className="p-2 bg-scmd-primary/15 rounded-lg text-scmd-primary">{item.icon}</div>
             </div>
-            <div className="p-2 bg-scmd-primary/20 rounded-lg text-scmd-primary">
-              <Users size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-1.5 text-scmd-safety text-xs font-bold">
-            <ArrowUpRight size={14} />
-            <span>+12% vs tháng trước</span>
-          </div>
-        </SCMDCard>
-
-        <SCMDCard glass className="p-6">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">Độ phủ Site</p>
-              <h3 className="text-3xl font-black text-white">128</h3>
-            </div>
-            <div className="p-2 bg-scmd-safety/20 rounded-lg text-scmd-safety">
-              <MapPin size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-1.5 text-scmd-safety text-xs font-bold">
-            <ArrowUpRight size={14} />
-            <span>Mới: VSIP 2, Landmark 81</span>
-          </div>
-        </SCMDCard>
-
-        <SCMDCard glass className="p-6">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">Ước tính MRR</p>
-              <h3 className="text-3xl font-black text-white">$12.4k</h3>
-            </div>
-            <div className="p-2 bg-scmd-cyber/20 rounded-lg text-scmd-cyber">
-              <DollarSign size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-1.5 text-scmd-safety text-xs font-bold">
-            <ArrowUpRight size={14} />
-            <span>+8.4% growth rate</span>
-          </div>
-        </SCMDCard>
-
-        <SCMDCard glass className="p-6">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-scmd-silver/40 uppercase tracking-widest">Tỉ lệ Retention</p>
-              <h3 className="text-3xl font-black text-white">98.2%</h3>
-            </div>
-            <div className="p-2 bg-purple-500/20 rounded-lg text-purple-400">
-              <Globe size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-1.5 text-scmd-safety text-xs font-bold">
-            <ArrowUpRight size={14} />
-            <span>Health score: Excellent</span>
-          </div>
-        </SCMDCard>
+          </SCMDCard>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Trend Chart */}
-        <SCMDCard glass className="lg:col-span-2 p-8 overflow-hidden h-[400px]">
-          <div className="flex items-center justify-between mb-8">
-            <div className="space-y-1">
-              <h3 className="text-lg font-black text-white uppercase tracking-tight">Growth Velocity</h3>
-              <p className="text-xs text-scmd-silver/40">Tốc độ tăng trưởng khách hàng và doanh thu theo tháng.</p>
-            </div>
-          </div>
-          
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
-                <defs>
-                  <linearGradient id="colorTenants" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
-                <XAxis 
-                  dataKey="month" 
-                  stroke="#475569" 
-                  fontSize={10} 
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis 
-                  stroke="#475569" 
-                  fontSize={10} 
-                  tickLine={false} 
-                  axisLine={false}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#0D1324', 
-                    border: '1px solid #1E293B',
-                    borderRadius: '8px',
-                    fontSize: '12px'
-                  }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="tenants" 
-                  stroke="#2563EB" 
-                  strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorTenants)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </SCMDCard>
-
-        {/* Sector Analytics */}
-        <SCMDCard glass className="p-8 h-[400px]">
-          <div className="space-y-1 mb-8">
-            <h3 className="text-lg font-black text-white uppercase tracking-tight">Sector Distribution</h3>
-            <p className="text-xs text-scmd-silver/40">Phân bổ khách hàng theo lĩnh vực kinh doanh.</p>
-          </div>
-
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sectorData} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  stroke="#8892B0" 
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                  width={80}
-                />
-                <Tooltip 
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{ backgroundColor: '#0D1324', border: '1px solid #1E293B' }}
-                />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {sectorData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {sectorData.map((s) => (
-              <div key={s.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                  <span className="text-[10px] font-bold text-scmd-silver/60 uppercase tracking-widest">{s.name}</span>
+        <SCMDCard glass className="lg:col-span-2 p-8 overflow-hidden min-h-[320px]">
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">Growth Velocity</h3>
+          <p className="mt-1 text-xs text-scmd-silver/40">Xu hướng tenant/doanh thu theo kỳ từ API.</p>
+          {hasTrendData ? (
+            <div className="mt-6 space-y-3">
+              {data.trends!.map((item) => (
+                <div key={item.label} className="grid grid-cols-[120px_1fr_120px] items-center gap-3 text-xs">
+                  <span className="font-bold text-scmd-silver/60">{item.label}</span>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-scmd-primary" style={{ width: `${Math.min(100, Number(item.tenants ?? 0))}%` }} /></div>
+                  <span className="text-right font-black text-white">{item.tenants ?? 0} tenant</span>
                 </div>
-                <span className="text-xs font-black text-white">{s.value}%</span>
-              </div>
-            ))}
-          </div>
-        </SCMDCard>
-      </div>
-
-      {/* Strategic Initiatives */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <SCMDCard glass className="p-8 border-l-4 border-scmd-cyber">
-          <div className="flex gap-4">
-            <div className="p-3 bg-scmd-cyber/10 rounded-2xl text-scmd-cyber shrink-0">
-              <Target size={24} />
+              ))}
             </div>
-            <div className="space-y-2">
-              <h4 className="font-black text-white uppercase text-sm tracking-widest">Q3 Strategy: Industrial Expansion</h4>
-              <p className="text-xs text-scmd-silver/60 leading-relaxed">
-                Tập trung mở rộng dịch vụ tại các khu công nghiệp VSIP và SHTP. 
-                Mục tiêu ký kết thêm 5 nhà thầu an ninh chiến lược trong tháng 7.
-              </p>
+          ) : (
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-scmd-silver/55">
+              Chưa có dữ liệu trend thật từ API. Không hiển thị dữ liệu demo.
             </div>
-          </div>
+          )}
         </SCMDCard>
 
-        <SCMDCard glass className="p-8 border-l-4 border-scmd-safety">
-          <div className="flex gap-4">
-            <div className="p-3 bg-scmd-safety/10 rounded-2xl text-scmd-safety shrink-0">
-              <Zap size={24} />
+        <SCMDCard glass className="p-8 min-h-[320px]">
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">Sector Distribution</h3>
+          <p className="mt-1 text-xs text-scmd-silver/40">Phân bổ tenant theo lĩnh vực.</p>
+          {hasSectorData ? (
+            <div className="mt-6 space-y-3">
+              {data.sectors!.map((sector) => (
+                <div key={sector.name} className="flex items-center justify-between border-b border-white/5 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-widest text-scmd-silver/60">{sector.name}</span>
+                  <span className="text-sm font-black text-white">{sector.value}%</span>
+                </div>
+              ))}
             </div>
-            <div className="space-y-2">
-              <h4 className="font-black text-white uppercase text-sm tracking-widest">Feature Focus: Predictive Analytics</h4>
-              <p className="text-xs text-scmd-silver/60 leading-relaxed">
-                Nâng cấp bộ AI Watcher tích hợp trực tiếp vào báo cáo SLA để tăng tỉ lệ up-sell gói PRO thêm 15%.
-              </p>
+          ) : (
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-scmd-silver/55">
+              Chưa có dữ liệu phân bổ lĩnh vực thật từ API.
             </div>
-          </div>
+          )}
         </SCMDCard>
       </div>
     </div>

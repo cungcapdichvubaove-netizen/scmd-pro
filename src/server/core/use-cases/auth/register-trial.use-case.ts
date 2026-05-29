@@ -5,6 +5,7 @@ import { redisClient } from '../../redis.js';
 import { TenantRepository } from '../../../modules/tenant/tenant.repository.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { metrics } from '../../metrics.js';
+import { ServiceUnavailableError } from '../../errors/domain.error.js';
 
 const TRIAL_COOLDOWN_DAYS = 90;
 const RESERVED_SUBDOMAINS = new Set([
@@ -124,20 +125,25 @@ export class RegisterTrialUseCase {
       if (!recaptchaToken) throw new Error('RECAPTCHA_REQUIRED');
       try {
         const response = await axios.post(
-          `https://www.google.com/recaptcha/api/siteverify?secret=${recaptchaSecret}&response=${recaptchaToken}`
+          `https://www.google.com/recaptcha/api/siteverify?secret=${recaptchaSecret}&response=${recaptchaToken}`,
+          {},
+          { timeout: 3000 }
         );
         if (!response.data.success) {
           logger.warn({ ip }, 'Trial reCAPTCHA failed');
           throw new Error('RECAPTCHA_INVALID');
         }
       } catch (e: any) {
-        metrics.incrementCounter('recaptcha_bypass', { action: 'trial_register', reason: e.code || 'timeout' });
-        logger.warn({ 
+        if (e.message === 'RECAPTCHA_INVALID') throw e;
+
+        metrics.incrementCounter('recaptcha_failure', { action: 'trial_register', reason: e.code || 'timeout' });
+        logger.error({ 
           err: e.message, 
           category: 'SECURITY',
-          alert_type: 'RECAPTCHA_BYPASS',
+          alert_type: 'RECAPTCHA_UNAVAILABLE',
           action: 'trial_register'
-        }, 'ReCAPTCHA service unreachable during trial register. Bypassing check.');
+        }, 'ReCAPTCHA service unreachable during trial register. Request denied by fail-closed policy.');
+        throw new ServiceUnavailableError('Không thể xác thực reCAPTCHA, vui lòng thử lại sau.');
       }
     }
   }

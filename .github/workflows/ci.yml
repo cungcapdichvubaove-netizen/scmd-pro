@@ -25,10 +25,23 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       DATABASE_URL: postgresql://user:password@localhost:5432/scmd_db?schema=public
       DIRECT_URL: postgresql://user:password@localhost:5432/scmd_db?schema=public
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_POOL_MIN: 1
+      REDIS_POOL_MAX: 2
+      REDIS_BULL_POOL_SIZE: 1
       JWT_SECRET: ci-test-secret-at-least-32-characters-long
       INTERNAL_API_SECRET: ci-internal-secret-for-tests-only
 
@@ -44,6 +57,15 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      - name: Secret Hygiene Gate
+        run: npm run security:scan
+
+      - name: Architecture Governance Gate
+        run: npm run architecture:scan
+
+      - name: Version Consistency Gate
+        run: npm run version:check
 
       - name: Prisma Audit & Generation
         run: |
@@ -65,8 +87,8 @@ jobs:
       - name: Static Analysis (Lint & Types)
         run: npm run lint
 
-      - name: Automated Security & Unit Tests
-        run: npm run test
+      - name: Automated Unit Tests & Coverage Gate
+        run: npm run test:coverage
 
       - name: Build Integrity Check (Frontend + Backend)
         run: npm run build

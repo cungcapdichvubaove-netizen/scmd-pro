@@ -1,9 +1,10 @@
-import { apiFetch } from "../lib/api";
+import { apiFetch, resolveApiUrl } from "../lib/api";
 import { LoginRequest, LoginResponse } from "../lib/contracts";
 
 export const loginAPI = async (payload: LoginRequest): Promise<LoginResponse> => {
-  const res = await fetch("/api/v1/auth/login", {
+  const res = await fetch(resolveApiUrl("/api/v1/auth/login"), {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json"
     },
@@ -12,32 +13,30 @@ export const loginAPI = async (payload: LoginRequest): Promise<LoginResponse> =>
 
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || "Login failed");
+    throw new Error(data.error || "Đăng nhập thất bại");
   }
 
   return data as LoginResponse;
 };
 
 export const getMe = async () => {
-    // FIX [BUG-4]: Dùng /api/v1/me thay vì /api/me để nhất quán với primary API base path.
-    // Trước đây hoạt động nhờ double-mount bug (#3). Sau khi fix #3, /api/me vẫn resolve qua
-    // compat alias nhưng explicit /api/v1/me là SSOT và tránh phụ thuộc vào alias behavior.
-    return await apiFetch('/api/v1/me');
+  return await apiFetch('/api/v1/me', {
+    skipAuthRefresh: true,
+    suppressErrorToast: true,
+  });
 };
 
-export const refreshTokenAPI = async (refreshToken: string): Promise<{ token: string; refreshToken: string }> => {
-  const res = await fetch("/api/auth/refresh", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ refreshToken })
+export const refreshTokenAPI = async (): Promise<{ refreshed: boolean }> => {
+  return await apiFetch('/api/v1/auth/refresh', {
+    method: 'POST',
+    body: JSON.stringify({}),
   });
+};
 
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || "Token refresh failed");
-  }
-
-  return data;
+export const logoutAPI = async (): Promise<void> => {
+  await apiFetch('/api/v1/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({}),
+    suppressErrorToast: true,
+  }).catch(() => undefined);
 };

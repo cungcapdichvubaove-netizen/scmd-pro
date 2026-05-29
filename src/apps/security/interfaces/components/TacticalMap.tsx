@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import L, { type LatLngTuple } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Map as MapIcon, Route, MapPin, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../../../lib/utils';
-// Declare Leaflet as a global variable since it's loaded via CDN
-declare const L: any;
 
 export interface MapPoint {
   id: string;
@@ -32,7 +32,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ points, onPointClick, 
   const markersRef = useRef<{ [key: string]: any }>({});
 
   useEffect(() => {
-    if (viewMode !== 'MAP' || !mapContainerRef.current || typeof L === 'undefined') return;
+    if (viewMode !== 'MAP' || !mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
       // Initialize map
@@ -68,7 +68,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ points, onPointClick, 
 
     // Draw Route Lines (Polylines)
     if (showRouteLine && Array.isArray(points) && points.length > 1) {
-      const latlngs = points.map(p => [p.lat, p.lon]);
+      const latlngs: LatLngTuple[] = points.map(p => [p.lat, p.lon]);
       
       // Background glow line
       L.polyline(latlngs, {
@@ -223,7 +223,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ points, onPointClick, 
         <div className="flex-1 w-full h-full flex items-center justify-start overflow-x-auto overflow-y-hidden px-16 no-scrollbar bg-[var(--color-bg)] relative">
            
            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--color-surface)_0%,_var(--color-bg)_100%)]"></div>
-           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03]"></div>
+           <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.035)_0_25%,transparent_25%_50%,rgba(255,255,255,0.025)_50%_75%,transparent_75%)] bg-[length:10px_10px] opacity-60"></div>
 
            <div className="flex items-center relative z-10 mx-auto min-w-max">
              {Array.isArray(points) && points.map((pt, i) => {

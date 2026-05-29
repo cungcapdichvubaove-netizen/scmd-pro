@@ -4,7 +4,7 @@ import { Vendor } from '../../../../server/domain/entities';
 import { SCMDButton } from '../../../common/interfaces/components/SCMDButton';
 import { SCMDInput } from '../../../common/interfaces/components/SCMDInput';
 import { SCMDCard } from '../../../common/interfaces/components/SCMDCard';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface VendorModalProps {
   isOpen: boolean;

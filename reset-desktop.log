@@ -1,0 +1,918 @@
+[05/29/2026 12:43:16.63] === SCMD Pro Factory Reset v2.3 Started === 
+[05/29/2026 12:43:21.00] [INFO ] Step 1: docker compose down -v 
+[?25l[0G[+] down 1/4
+ [32m✔[0m Container scmd-desktop-pdf       [32mRemoved[0m                                                [34m0.0s[0m
+ [33m-[0m Volume scmdpro_scmd_local_pgdata Removing                                               [34m0.0s[0m
+ [33m-[0m Volume scmdpro_scmd_local_assets Removing                                               [34m0.0s[0m
+ [33m-[0m Network scmdpro_default          Removing                                               [34m0.0s[0m
+[?25h[?25l[5A[0G[+] down 3/4
+ [32m✔[0m Container scmd-desktop-pdf       [32mRemoved[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mRemoved[0m                                                [34m0.1s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mRemoved[0m                                                [34m0.1s[0m
+ [33m-[0m Network scmdpro_default          Removing                                               [34m0.1s[0m
+[?25h[?25l[5A[0G[+] down 4/4
+ [32m✔[0m Container scmd-desktop-pdf       [32mRemoved[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mRemoved[0m                                                [34m0.1s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mRemoved[0m                                                [34m0.1s[0m
+ [32m✔[0m Network scmdpro_default          [32mRemoved[0m                                                [34m0.2s[0m
+[?25h[05/29/2026 12:43:21.88] [INFO ] Step 2a: build pdf service (with cache) 
+ Image scmdpro-pdf Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 467B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile.pdf
+#2 transferring dockerfile: 1.61kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 ...
+
+#4 [auth] library/node:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 3.2s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 1.45kB done
+#5 DONE 0.0s
+
+#6 [1/7] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#6 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 110B 0.0s done
+#7 DONE 0.0s
+
+#8 [2/7] WORKDIR /app
+#8 CACHED
+
+#9 [3/7] RUN apk add --no-cache     chromium     udev     ttf-freefont     wget
+#9 CACHED
+
+#10 [4/7] COPY scripts/package.json ./
+#10 CACHED
+
+#11 [6/7] COPY scripts/pdf-server.js ./scripts/
+#11 CACHED
+
+#12 [5/7] RUN npm install --ignore-scripts
+#12 CACHED
+
+#13 [7/7] RUN addgroup -S pptruser && adduser -S -G pptruser pptruser   && mkdir -p /home/pptruser/Downloads   && chown -R pptruser:pptruser /home/pptruser   && chown -R pptruser:pptruser /app
+#13 CACHED
+
+#14 exporting to image
+#14 exporting layers done
+#14 exporting manifest sha256:48b816fad458de55660bc236df444f03d4ae152c2f537b7ec6dbcaff14f24caa done
+#14 exporting config sha256:eb64c3f14dcc83f1d9dcc27213feb05c1ca67e000ebfcf663a2c9d4f2a3ed9c6 done
+#14 exporting attestation manifest sha256:96a5205f2de805ae7e6694a68c881f8eaa5a527a3b34455e0be43c7816faa181
+#14 exporting attestation manifest sha256:96a5205f2de805ae7e6694a68c881f8eaa5a527a3b34455e0be43c7816faa181 0.0s done
+#14 exporting manifest list sha256:7dfbdef33c142963869ac158d9f7870706b4a350e912f07d0cf53218e5258061 0.0s done
+#14 naming to docker.io/library/scmdpro-pdf:latest done
+#14 unpacking to docker.io/library/scmdpro-pdf:latest done
+#14 DONE 0.1s
+
+#15 resolving provenance for metadata file
+#15 DONE 0.0s
+ Image scmdpro-pdf Built 
+[05/29/2026 12:43:27.06] [INFO ] Step 2b: build app service (no-cache) 
+ Image scmdpro-pdf Building 
+ Image scmdpro-app Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.05kB done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile.desktop
+#2 transferring dockerfile: 5.25kB done
+#2 DONE 0.0s
+
+#3 [auth] docker/dockerfile:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#4 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#4 DONE 2.8s
+
+#5 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#5 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.0s done
+#5 CACHED
+
+#6 [internal] load metadata for docker.io/library/node:22-alpine
+#6 DONE 0.4s
+
+#7 [internal] load .dockerignore
+#7 transferring context: 1.45kB done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 DONE 0.0s
+
+#9 [runner  1/14] FROM docker.io/library/node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
+#9 resolve docker.io/library/node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 0.0s done
+#9 DONE 0.0s
+
+#10 [runner  2/14] WORKDIR /app
+#10 CACHED
+
+#8 [internal] load build context
+#8 transferring context: 11.76MB 5.0s
+#8 transferring context: 12.81MB 5.0s done
+#8 DONE 5.0s
+
+#11 [runner  3/14] COPY package.json package-lock.json ./
+#11 DONE 0.1s
+
+#12 [deps 3/5] RUN --mount=type=cache,target=/root/.npm     for attempt in 1 2 3; do       npm install -g npm@11.6.2         --no-audit         --no-fund         --loglevel=warn && break;       rc=$?;       if [ "$attempt" = "3" ]; then exit "$rc"; fi;       sleep $((attempt * 20));     done
+#12 219.3 
+#12 219.3 removed 11 packages, and changed 70 packages in 4m
+#12 DONE 219.3s
+
+#13 [deps 4/5] COPY package.json package-lock.json ./
+#13 DONE 0.1s
+
+#14 [deps 5/5] RUN --mount=type=cache,target=/root/.npm     for attempt in 1 2 3; do       npm ci         --prefer-offline         --no-audit         --no-fund         --maxsockets=5         --loglevel=warn && break;       rc=$?;       if [ "$attempt" = "3" ]; then exit "$rc"; fi;       sleep $((attempt * 30));     done
+#14 336.1 npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#14 493.1 npm error code ECONNRESET
+#14 493.1 npm error errno ECONNRESET
+#14 493.1 npm error network Invalid response body while trying to fetch https://registry.npmjs.org/scheduler: aborted
+#14 493.1 npm error network This is a problem related to network connectivity.
+#14 493.1 npm error network In most cases you are behind a proxy or have bad network settings.
+#14 493.1 npm error network
+#14 493.1 npm error network If you are behind a proxy, please make sure that the
+#14 493.1 npm error network 'proxy' config is set properly.  See: 'npm help config'
+#14 493.1 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-05-29T05_47_11_843Z-debug-0.log
+#14 536.2 npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#14 568.1 
+#14 568.1 added 1320 packages in 45s
+#14 DONE 568.7s
+
+#15 [builder 1/5] WORKDIR /app
+#15 DONE 0.4s
+
+#16 [builder 2/5] COPY . .
+#16 DONE 0.2s
+
+#17 [builder 3/5] RUN mkdir -p /app/docs
+#17 DONE 0.2s
+
+#18 [builder 4/5] RUN npx prisma generate
+#18 1.259 Loaded Prisma config from prisma.config.ts.
+#18 1.259 
+#18 1.411 Prisma config detected, skipping environment variable loading.
+#18 1.412 Prisma schema loaded from prisma/schema.prisma
+#18 50.86 
+#18 50.86 ✔ Generated Prisma Client (v6.19.3) to ./node_modules/@prisma/client in 339ms
+#18 50.86 
+#18 50.86 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#18 50.86 
+#18 50.86 Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+#18 50.86 
+#18 DONE 50.9s
+
+#19 [builder 5/5] RUN npm run build
+#19 0.398 
+#19 0.398 > scmdpro-backend@5.9.0-4 build
+#19 0.398 > npm run db:generate && npm run build:frontend && npm run build:server && npm run build:backend
+#19 0.398 
+#19 0.499 
+#19 0.499 > scmdpro-backend@5.9.0-4 db:generate
+#19 0.499 > prisma generate
+#19 0.499 
+#19 1.081 Loaded Prisma config from prisma.config.ts.
+#19 1.081 
+#19 1.205 Prisma config detected, skipping environment variable loading.
+#19 1.206 Prisma schema loaded from prisma/schema.prisma
+#19 1.811 
+#19 1.811 ✔ Generated Prisma Client (v6.19.3) to ./node_modules/@prisma/client in 291ms
+#19 1.811 
+#19 1.811 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#19 1.811 
+#19 1.811 Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+#19 1.811 
+#19 1.811 ┌─────────────────────────────────────────────────────────┐
+#19 1.811 │  Update available 6.19.3 -> 7.8.0                       │
+#19 1.811 │                                                         │
+#19 1.811 │  This is a major update - please follow the guide at    │
+#19 1.811 │  https://pris.ly/d/major-version-upgrade                │
+#19 1.811 │                                                         │
+#19 1.811 │  Run the following to update                            │
+#19 1.811 │    npm i --save-dev prisma@latest                       │
+#19 1.811 │    npm i @prisma/client@latest                          │
+#19 1.811 └─────────────────────────────────────────────────────────┘
+#19 1.925 
+#19 1.925 > scmdpro-backend@5.9.0-4 build:frontend
+#19 1.925 > node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build
+#19 1.925 
+#19 2.368 vite v7.3.2 building client environment for production...
+#19 2.430 transforming...
+#19 2.675 /*! 🌼 daisyUI 5.5.19 */
+#19 8.959 ✓ 4097 modules transformed.
+#19 9.356 rendering chunks...
+#19 9.432 [esbuild css minify]
+#19 9.432 ▲ [WARNING] "file" is not a known CSS property [unsupported-css-property]
+#19 9.432 
+#19 9.432     <stdin>:8:205558:
+#19 9.432       8 │ ...r-select:none}.\[file\:line\]{file:line}.group-focus-within\:tex...
+#19 9.432         │                                  ~~~~
+#19 9.432         ╵                                  flex
+#19 9.432 
+#19 9.432   Did you mean "flex" instead?
+#19 9.432 
+#19 9.432 
+#19 9.461 [plugin vite:reporter] 
+#19 9.461 (!) /app/src/lib/toast.tsx is dynamically imported by /app/src/lib/api.ts, /app/src/main.tsx but also statically imported by /app/src/App.tsx, /app/src/apps/superadmin/billing/BillingManagementTab.tsx, dynamic import will not move module into another chunk.
+#19 9.461 
+#19 9.540 dist/manifest.webmanifest                              0.76 kB
+#19 9.540 dist/index.html                                        1.39 kB
+#19 9.540 dist/assets/css/vendor-maps-CIGW-MKW.css              15.61 kB
+#19 9.540 dist/assets/css/index-CnKJO8wc.css                   298.08 kB
+#19 9.540 dist/assets/js/check-D3c0guOi.js                       0.12 kB
+#19 9.540 dist/assets/js/chevron-right-D0-eka1Q.js               0.13 kB
+#19 9.540 dist/assets/js/chevron-left-DsnLFEE6.js                0.13 kB
+#19 9.540 dist/assets/js/plus-Cp0Hz6Qp.js                        0.15 kB
+#19 9.540 dist/assets/js/clock-BlHebA2T.js                       0.17 kB
+#19 9.540 dist/assets/js/clock-3-BG5k9ulP.js                     0.17 kB
+#19 9.540 dist/assets/js/arrow-left-CB13EVGC.js                  0.17 kB
+#19 9.540 dist/assets/js/arrow-right-mc3o_Joj.js                 0.17 kB
+#19 9.540 dist/assets/js/search-DcVu7Ozq.js                      0.17 kB
+#19 9.540 dist/assets/js/trending-up-D-kvg_Mm.js                 0.18 kB
+#19 9.540 dist/assets/js/JsonLd-DdUeqa_x.js                      0.19 kB
+#19 9.540 dist/assets/js/menu-DsCeSVtZ.js                        0.19 kB
+#19 9.540 dist/assets/js/circle-check-big-i_GP_HSP.js            0.19 kB
+#19 9.540 dist/assets/js/play-D8CRGDg-.js                        0.19 kB
+#19 9.540 dist/assets/js/user-Cgo-DcLS.js                        0.19 kB
+#19 9.540 dist/assets/js/lock-DGycVr3V.js                        0.20 kB
+#19 9.540 dist/assets/js/useDebounce-BSiXzNTW.js                 0.20 kB
+#19 9.540 dist/assets/js/credit-card-CxxWim8l.js                 0.21 kB
+#19 9.540 dist/assets/js/mail-DDujaEUi.js                        0.21 kB
+#19 9.540 dist/assets/js/target-B_xwq-c2.js                      0.22 kB
+#19 9.540 dist/assets/js/log-out-WtdE8k5i.js                     0.23 kB
+#19 9.540 dist/assets/js/upload-DCo1cZGX.js                      0.23 kB
+#19 9.540 dist/assets/js/log-in-O6RLOEWc.js                      0.23 kB
+#19 9.540 dist/assets/js/download-CbrCpLQU.js                    0.23 kB
+#19 9.541 dist/assets/js/message-square-EA_WsTGa.js              0.23 kB
+#19 9.541 dist/assets/js/activity-BXFa7lBR.js                    0.24 kB
+#19 9.541 dist/assets/js/pen-Bc5GUZ6a.js                         0.24 kB
+#19 9.541 dist/assets/js/globe-jSBMLPW6.js                       0.24 kB
+#19 9.541 dist/assets/js/circle-question-mark-BQ6f2QWy.js        0.24 kB
+#19 9.541 dist/assets/js/route-4ejnOE51.js                       0.25 kB
+#19 9.541 dist/assets/js/circle-alert-qZ0BVBxV.js                0.25 kB
+#19 9.541 dist/assets/js/chart-column-CryBypkt.js                0.25 kB
+#19 9.541 dist/assets/js/funnel-BsJGSLcn.js                      0.25 kB
+#19 9.541 dist/assets/js/external-link-DVBqKCRA.js               0.25 kB
+#19 9.541 dist/assets/js/eye-BdkxHjIO.js                         0.25 kB
+#19 9.541 dist/assets/js/map-pin-HKkY2qEI.js                     0.26 kB
+#19 9.541 dist/assets/js/calendar-C7tI0h-M.js                    0.26 kB
+#19 9.541 dist/assets/js/zap-Bigy-PwL.js                         0.26 kB
+#19 9.541 dist/assets/js/shield-kvG_f5c3.js                      0.27 kB
+#19 9.541 dist/assets/js/send-BQJJHS9A.js                        0.29 kB
+#19 9.541 dist/assets/js/clipboard-check-DRMt13KF.js             0.30 kB
+#19 9.541 dist/assets/js/users-B11y14in.js                       0.31 kB
+#19 9.541 dist/assets/js/user-plus-DmKc8b6J.js                   0.31 kB
+#19 9.541 dist/assets/js/file-exclamation-point-BJrN5vcx.js      0.31 kB
+#19 9.541 dist/assets/js/shield-check-PeSHnmQh.js                0.32 kB
+#19 9.541 dist/assets/js/tag-CnyZQDjy.js                         0.32 kB
+#19 9.541 dist/assets/js/refresh-ccw-BRS_Hq-s.js                 0.32 kB
+#19 9.541 dist/assets/js/phone-BGV8jcsV.js                       0.32 kB
+#19 9.541 dist/assets/js/crypto-BB64vVle.js                      0.33 kB
+#19 9.541 dist/assets/js/save-CiZuOyer.js                        0.33 kB
+#19 9.541 dist/assets/js/trash-2-DP5iyyt3.js                     0.33 kB
+#19 9.541 dist/assets/js/camera-CRPqOm2y.js                      0.34 kB
+#19 9.541 dist/assets/js/shield-alert-C0RuvPcD.js                0.35 kB
+#19 9.541 dist/assets/js/building-2-Df4opwtR.js                  0.38 kB
+#19 9.541 dist/assets/js/file-text-DfNNNn2I.js                   0.39 kB
+#19 9.541 dist/assets/js/clipboard-list-D14AldLI.js              0.41 kB
+#19 9.541 dist/assets/js/auth-BbExTdz-.js                        0.42 kB
+#19 9.541 dist/assets/js/map-Be1lpmUU.js                         0.43 kB
+#19 9.541 dist/assets/js/newspaper-Cdnybq1A.js                   0.46 kB
+#19 9.541 dist/assets/js/settings-BkhL_929.js                    0.48 kB
+#19 9.541 dist/assets/js/sparkles-B7L_3ywE.js                    0.50 kB
+#19 9.541 dist/assets/js/ai-proxy.service-f1ElScz0.js            0.55 kB
+#19 9.541 dist/assets/js/SCMDCard-BuMqJWL6.js                    0.56 kB
+#19 9.541 dist/assets/js/history-CCNJsyA8.js                     0.59 kB
+#19 9.541 dist/assets/js/cpu-D8-qFwmO.js                         0.64 kB
+#19 9.541 dist/assets/js/arrow-up-narrow-wide-69-1F_7i.js        0.72 kB
+#19 9.541 dist/assets/js/entities-BtaLkNSX.js                    0.82 kB
+#19 9.541 dist/assets/js/SEOHead-CtOfIiwg.js                     0.98 kB
+#19 9.541 dist/assets/js/SCMDInput-BNdsBmJT.js                   1.06 kB
+#19 9.541 dist/assets/js/SCMDButton-nkMody58.js                  1.24 kB
+#19 9.541 dist/assets/js/SCMDLogo-DkpW_FF5.js                    1.36 kB
+#19 9.541 dist/assets/js/FeatureLock-cXidsbZU.js                 1.52 kB
+#19 9.542 dist/assets/js/useDashboardStore-B1lM9fzF.js           1.59 kB
+#19 9.542 dist/assets/js/WatcherPrintView-CEy5kmBl.js            2.34 kB
+#19 9.542 dist/assets/js/ViolationsTab-BykWyvuh.js               2.70 kB
+#19 9.542 dist/assets/js/TasksTab-BWwM1jF5.js                    3.00 kB
+#19 9.542 dist/assets/js/useTranslation-D3C5eY0h.js              3.85 kB
+#19 9.542 dist/assets/js/IncidentPrintView-DUHWGS0w.js           4.81 kB
+#19 9.542 dist/assets/js/MarketGrowthTab-Bc2poLVJ.js             5.14 kB
+#19 9.542 dist/assets/js/AttendanceModule-CA6iTIjc.js            5.67 kB
+#19 9.542 dist/assets/js/workbox-window.prod.es5-BIl4cyR9.js     5.76 kB
+#19 9.542 dist/assets/js/OpsTableSystem-otdKIL4Q.js              5.81 kB
+#19 9.543 dist/assets/js/UsageAnalyticsTab-DU7f6odW.js           6.10 kB
+#19 9.543 dist/assets/js/VendorCommanderWorkspace-gimFAb23.js    6.54 kB
+#19 9.543 dist/assets/js/GuardTasksModule-B0C343JK.js            7.92 kB
+#19 9.543 dist/assets/js/publicNewsArticles-Dqpn7OaV.js          8.31 kB
+#19 9.543 dist/assets/js/vendor-toast-DYQNm3Oh.js                8.77 kB
+#19 9.543 dist/assets/js/SLOMonitorTab-DGg4LiSd.js               9.27 kB
+#19 9.543 dist/assets/js/LandingHeader-B5E_Gsrc.js               9.94 kB
+#19 9.543 dist/assets/js/TacticalMap-D7ts_qPI.js                10.35 kB
+#19 9.543 dist/assets/js/HelpPage-tr5ZvCFR.js                   10.45 kB
+#19 9.543 dist/assets/js/ShiftSchedulerView-Cy2SPiVj.js         10.87 kB
+#19 9.543 dist/assets/js/NewsDetail-snWZ89WW.js                 11.24 kB
+#19 9.543 dist/assets/js/SettingsTab-C-Ht9JLh.js                12.81 kB
+#19 9.543 dist/assets/js/IncidentReport-FX2SXSpA.js             13.50 kB
+#19 9.543 dist/assets/js/PricingAndFAQSection-BJJIqQux.js       13.58 kB
+#19 9.543 dist/assets/js/SecurityDashboard-DwHjYNzb.js          14.08 kB
+#19 9.543 dist/assets/js/WatcherInsights-B5MMZC-8.js            14.35 kB
+#19 9.544 dist/assets/js/FeaturesAndTrustSection-DaIvn3LM.js    14.45 kB
+#19 9.544 dist/assets/js/BillingTab-B0JylsmY.js                 14.55 kB
+#19 9.544 dist/assets/js/ReportsTab-BPtVdmbo.js                 15.98 kB
+#19 9.544 dist/assets/js/index.esm-Bd2-uuJs.js                  16.71 kB
+#19 9.544 dist/assets/js/FileManager-wq4ztIr1.js                16.79 kB
+#19 9.544 dist/assets/js/NewsPage-CnWCoSPq.js                   18.46 kB
+#19 9.544 dist/assets/js/AuditTab-rQSiQZ8S.js                   18.55 kB
+#19 9.545 dist/assets/js/ContactPage-BxVWvdgS.js                19.07 kB
+#19 9.545 dist/assets/js/OperationsTables-Cn2ZyJuv.js           19.60 kB
+#19 9.545 dist/assets/js/Login-BwrXsc3J.js                      19.80 kB
+#19 9.545 dist/assets/js/TaskManager-CUya_KIy.js                20.18 kB
+#19 9.545 dist/assets/js/HelpTab-CwGQ3CvN.js                    20.55 kB
+#19 9.546 dist/assets/js/PublicArticlePage-CTGGneg_.js          23.42 kB
+#19 9.546 dist/assets/js/useTenantStaff-C47dTtCf.js             23.91 kB
+#19 9.546 dist/assets/js/AttendanceTab-DUpENMej.js              25.39 kB
+#19 9.546 dist/assets/js/LandingPage-Bd5W_QV6.js                25.43 kB
+#19 9.546 dist/assets/js/OverviewTab-DgWtxEnD.js                26.71 kB
+#19 9.546 dist/assets/js/PatrolDashboard-D3x8vJBM.js            33.18 kB
+#19 9.546 dist/assets/js/IncidentsTab-CPuFN6tf.js               38.45 kB
+#19 9.546 dist/assets/js/vendor-realtime-DsENSA6R.js            42.48 kB
+#19 9.547 dist/assets/js/VendorTab-DSZKOxjQ.js                  65.66 kB
+#19 9.547 dist/assets/js/TrialRegistration-D3a1ewrX.js          66.59 kB
+#19 9.547 dist/assets/js/SitesTab-F1ugLGiI.js                   69.70 kB
+#19 9.547 dist/assets/js/TenantAdminDashboard-DyujfP77.js       91.72 kB
+#19 9.547 dist/assets/js/StaffTab-C3as3_2V.js                  103.45 kB
+#19 9.547 dist/assets/js/index-BCdOy2s2.js                     117.58 kB
+#19 9.547 dist/assets/js/index-BWVNv1DS.js                     126.32 kB
+#19 9.547 dist/assets/js/SuperAdminDashboard-Bzp9pwTp.js       132.56 kB
+#19 9.547 dist/assets/js/vendor-motion-SWtsAgzd.js             134.78 kB
+#19 9.547 dist/assets/js/vendor-maps-Cii6ukn2.js               148.85 kB
+#19 9.547 dist/assets/js/vendor-react-MJeeXAUw.js              267.34 kB
+#19 9.547 dist/assets/js/vendor-charts-BHr-yOjU.js             344.48 kB
+#19 9.548 ✓ built in 7.15s
+#19 11.19 
+#19 11.19 PWA v1.2.0
+#19 11.19 mode      generateSW
+#19 11.19 precache  148 entries (4413.14 KiB)
+#19 11.19 files generated
+#19 11.19   dist/sw.js
+#19 11.19   dist/workbox-01ded3f8.js
+#19 11.38 
+#19 11.38 > scmdpro-backend@5.9.0-4 build:server
+#19 11.38 > esbuild src/server/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --target=node22 --packages=external
+#19 11.38 
+#19 11.41 
+#19 11.41   dist/index.js  1.2mb ⚠️
+#19 11.41 
+#19 11.41 ⚡ Done in 24ms
+#19 11.51 
+#19 11.51 > scmdpro-backend@5.9.0-4 build:backend
+#19 11.51 > node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -p tsconfig.backend.json
+#19 11.51 
+#19 DONE 20.1s
+
+#20 [runner  4/14] COPY --from=builder /app/node_modules ./node_modules
+#20 DONE 6.6s
+
+#21 [runner  5/14] COPY prisma ./prisma
+#21 DONE 0.4s
+
+#22 [runner  6/14] COPY run-migration.mjs ./
+#22 DONE 0.1s
+
+#23 [runner  7/14] COPY entrypoint.sh ./
+#23 DONE 0.0s
+
+#24 [runner  8/14] RUN chmod +x entrypoint.sh
+#24 DONE 0.2s
+
+#25 [runner  9/14] COPY --from=builder /app/dist ./dist
+#25 DONE 0.1s
+
+#26 [runner 10/14] COPY --from=builder /app/public ./public
+#26 DONE 0.0s
+
+#27 [runner 11/14] COPY --from=builder /app/src ./src
+#27 DONE 0.1s
+
+#28 [runner 12/14] COPY --from=builder /app/tsconfig*.json ./
+#28 DONE 0.6s
+
+#29 [runner 13/14] COPY --from=builder /app/docs ./docs
+#29 DONE 0.0s
+
+#30 [runner 14/14] RUN mkdir -p /app/public/assets && chown -R node:node /app/public/assets
+#30 DONE 0.2s
+
+#31 exporting to image
+#31 exporting layers
+#31 exporting layers 24.6s done
+#31 exporting manifest sha256:0c90783cd437084c5668c3d35489228ca3d6bab5eb74f1bfab894d744529a9ad 0.0s done
+#31 exporting config sha256:47a5b1ee2396a9b50b7ed26258897b46d91b3e8940d2580f1d1d3d7ef29f06d6 0.0s done
+#31 exporting attestation manifest sha256:8e4c647ad68889083e430846926d3e6e8f28db91d5676b2b4cb70244d4396745 0.0s done
+#31 exporting manifest list sha256:fc8e03b876d165066b5372b869dada51fc5f3379d07a8280ad719b09604beaf5 0.0s done
+#31 naming to docker.io/library/scmdpro-app:latest done
+#31 unpacking to docker.io/library/scmdpro-app:latest
+#31 unpacking to docker.io/library/scmdpro-app:latest 9.7s done
+#31 DONE 34.4s
+
+#32 resolving provenance for metadata file
+#32 DONE 0.0s
+ Image scmdpro-app Built 
+[05/29/2026 12:58:38.65] [INFO ] Step 3: docker compose up 
+[?25l[0G[+] up 2/2
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+[?25h[?25l[3A[0G[+] up 3/6
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Creating                                               [34m0.1s[0m
+ [33m-[0m Container scmd-desktop-pdf       Creating                                               [34m0.1s[0m
+ [33m-[0m Container scmd-desktop-redis     Creating                                               [34m0.1s[0m
+[?25h[?25l[7A[0G[+] up 3/6
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Creating                                               [34m0.2s[0m
+ [33m-[0m Container scmd-desktop-pdf       Creating                                               [34m0.2s[0m
+ [33m-[0m Container scmd-desktop-redis     Creating                                               [34m0.2s[0m
+[?25h[?25l[7A[0G[+] up 3/6
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Creating                                               [34m0.3s[0m
+ [33m-[0m Container scmd-desktop-pdf       Creating                                               [34m0.3s[0m
+ [33m-[0m Container scmd-desktop-redis     Creating                                               [34m0.3s[0m
+[?25h[?25l[7A[0G[+] up 3/6
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Creating                                               [34m0.4s[0m
+ [33m-[0m Container scmd-desktop-pdf       Creating                                               [34m0.4s[0m
+ [33m-[0m Container scmd-desktop-redis     Creating                                               [34m0.4s[0m
+[?25h[?25l[7A[0G[+] up 3/6
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Creating                                               [34m0.5s[0m
+ [33m-[0m Container scmd-desktop-pdf       Creating                                               [34m0.5s[0m
+ [33m-[0m Container scmd-desktop-redis     Creating                                               [34m0.5s[0m
+[?25h[?25l[7A[0G[+] up 3/6
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Creating                                               [34m0.6s[0m
+ [33m-[0m Container scmd-desktop-pdf       Creating                                               [34m0.6s[0m
+ [33m-[0m Container scmd-desktop-redis     Creating                                               [34m0.6s[0m
+[?25h[?25l[7A[0G[+] up 6/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Container scmd-desktop-db        [32mCreated[0m                                                [34m0.6s[0m
+ [32m✔[0m Container scmd-desktop-pdf       [32mCreated[0m                                                [34m0.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 7/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Container scmd-desktop-db        [32mCreated[0m                                                [34m0.6s[0m
+ [32m✔[0m Container scmd-desktop-pdf       [32mCreated[0m                                                [34m0.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Starting                                               [34m0.9s[0m
+ [33m-[0m Container scmd-desktop-pdf       Starting                                               [34m0.9s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Starting                                               [34m1.0s[0m
+ [33m-[0m Container scmd-desktop-pdf       Starting                                               [34m1.0s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 6/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Starting                                               [34m1.1s[0m
+ [32m✔[0m Container scmd-desktop-pdf       [32mStarted[0m                                                [34m1.1s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.2s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.2s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.3s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.3s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.4s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.4s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.5s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.5s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.6s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.7s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.7s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.8s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.8s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m1.9s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m1.9s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.0s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.0s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.1s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.1s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.2s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.2s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.3s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.3s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.4s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.4s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.5s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.5s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.6s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.7s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.7s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.8s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.8s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m2.9s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m2.9s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.0s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.0s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.1s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.1s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.2s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.2s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.3s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.3s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.4s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.4s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.5s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.5s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.6s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.7s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.7s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.8s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.8s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m3.9s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m3.9s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.0s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.0s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.1s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.1s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.2s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.2s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.3s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.3s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.4s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.4s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.5s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.5s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.6s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.7s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.7s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.8s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.8s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m4.9s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m4.9s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.0s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.0s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.1s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.1s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.2s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.2s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.3s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.3s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.4s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.4s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.5s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.5s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.6s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.7s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.7s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.8s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.8s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m5.9s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m5.9s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m6.0s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m6.0s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 4/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m6.1s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m6.1s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 5/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m6.2s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m6.2s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 5/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m6.3s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m6.3s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 5/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m6.4s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m6.4s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 5/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m6.5s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m6.5s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 5/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [33m-[0m Container scmd-desktop-db        Waiting                                                [34m6.6s[0m
+ [33m-[0m Container scmd-desktop-pdf       Waiting                                                [34m6.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 6/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Container scmd-desktop-db        [32mHealthy[0m                                                [34m6.6s[0m
+ [32m✔[0m Container scmd-desktop-pdf       [32mHealthy[0m                                                [34m6.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 6/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Container scmd-desktop-db        [32mHealthy[0m                                                [34m6.6s[0m
+ [32m✔[0m Container scmd-desktop-pdf       [32mHealthy[0m                                                [34m6.6s[0m
+ ... 2 more                                                                                    
+[?25h[?25l[7A[0G[+] up 7/7
+ [32m✔[0m Network scmdpro_default          [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_pgdata [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Volume scmdpro_scmd_local_assets [32mCreated[0m                                                [34m0.0s[0m
+ [32m✔[0m Container scmd-desktop-db        [32mHealthy[0m                                                [34m6.6s[0m
+ [32m✔[0m Container scmd-desktop-pdf       [32mHealthy[0m                                                [34m6.6s[0m
+ ... 2 more                                                                                    
+[?25h[05/29/2026 12:58:57.65] [INFO ] Health check passed 

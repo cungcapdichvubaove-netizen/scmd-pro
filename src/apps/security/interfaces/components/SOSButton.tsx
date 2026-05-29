@@ -5,7 +5,7 @@ import { cn } from '../../../../lib/utils';
 import { getAuthHeaders } from '../../../common/utils/auth';
 import { useAuth } from '../../../../context/AuthContext';
 
-import socket from '../../../../lib/socket';
+import { getSocket } from '../../../../lib/socket';
 
 export const SOSButton: React.FC = () => {
   const { user, tenantId } = useAuth();
@@ -80,6 +80,7 @@ export const SOSButton: React.FC = () => {
         };
 
         // Emit via Socket.io for < 1s latency
+        const socket = await getSocket();
         socket.emit('sos_signal', sosData);
 
         // Also save to database for audit

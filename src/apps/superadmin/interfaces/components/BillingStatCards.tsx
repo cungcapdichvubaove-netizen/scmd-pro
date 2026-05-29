@@ -26,7 +26,7 @@ export function BillingStatCards() {
         <div key={i} className="bg-[#112240] p-5 rounded-xl border border-white/5 hover:border-blue-500/30 transition-all group shadow-lg">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[#8892B0] text-[10px] font-black uppercase tracking-widest">{s.label}</p>
+              <p className="text-[#8892B0] text-xs font-semibold uppercase">{s.label}</p>
               <h3 className={`mt-2 text-2xl font-bold text-[#CCD6F6] ${s.label.includes('MRR') ? 'font-mono' : ''}`}>
                 {s.value}
               </h3>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, CreditCard, History, Calendar, Clock } from 'lucide-react'
 import { useBillingStore } from './billing.store.js'
 import { apiFetch } from '../../../lib/api.js'
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 
 export function PaymentHistoryPanel() {
   const { selectedTenant, selectTenant } = useBillingStore()
@@ -42,7 +42,7 @@ export function PaymentHistoryPanel() {
               <History size={24} />
             </div>
             <div>
-              <h2 className="text-white font-black text-xl tracking-tighter uppercase">Audit Ledger</h2>
+              <h2 className="text-white font-black text-xl tracking-tighter uppercase">Sổ nhật ký kiểm toán</h2>
               <p className="text-[#8892B0] text-xs font-bold uppercase tracking-widest">Lịch sử thanh toán & Kích hoạt</p>
             </div>
           </div>

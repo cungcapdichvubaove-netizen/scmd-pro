@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import L, { type LatLngTuple } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { MapPin, CheckCircle2, Loader2, Navigation, Play, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SCMDButton } from '../../../../apps/common/interfaces/components/SCMDButton';
@@ -11,8 +13,6 @@ import { SCMDCard } from '../../../../apps/common/interfaces/components/SCMDCard
 import { cn } from '../../../../lib/utils';
 import { apiFetch } from '../../../../lib/api.js';
 import type { Checkpoint, CheckItem } from '../types';
-
-declare const L: any;
 
 interface BenchmarkLearningModeProps {
   checkpoints: Checkpoint[];
@@ -60,7 +60,7 @@ export const BenchmarkLearningMode: React.FC<BenchmarkLearningModeProps> = ({
   }, []);
 
   useEffect(() => {
-    if (showMap && mapContainerRef.current && typeof L !== 'undefined') {
+    if (showMap && mapContainerRef.current) {
       if (!mapInstanceRef.current) {
         mapInstanceRef.current = L.map(mapContainerRef.current, {
           zoomControl: false, attributionControl: false,
@@ -76,7 +76,7 @@ export const BenchmarkLearningMode: React.FC<BenchmarkLearningModeProps> = ({
       // Draw connections for context
       const currentMap = mapInstanceRef.current;
       if (Array.isArray(checkpoints) && checkpoints.length > 1) {
-        const latlngs = checkpoints
+        const latlngs: LatLngTuple[] = checkpoints
           .filter(c => c.latitude && c.longitude)
           .map(c => [c.latitude, c.longitude]);
         

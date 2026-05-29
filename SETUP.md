@@ -7,7 +7,7 @@ scmd-fix/
 ├── Dockerfile                          ← FIX #1: thêm COPY dist-backend/
 ├── docker-compose.yml                  ← FIX #2: secrets từ .env, migrate deploy, nginx
 ├── nginx.conf                          ← FIX #3: proxy_pass đến 'app' (không phải 'api')
-├── redis.conf                          ← FIX #4: requirepass khớp .env
+├── redis.conf                          ← Redis runtime template, không chứa password
 ├── .env                                ← FIX #5: template secrets (CẦN điền thật)
 ├── .gitignore                          ← bảo vệ .env khỏi bị commit
 ├── scripts/
@@ -50,8 +50,7 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 #   REDIS_PASSWORD=<mật khẩu Redis mạnh>
 ```
 
-**Lưu ý quan trọng:** `REDIS_PASSWORD` trong `.env` phải khớp với `requirepass` trong `redis.conf`.
-Mặc định cả hai đều là `redis_secure_pass_2026` — thay bằng password thật trước khi production.
+**Lưu ý quan trọng:** production không có mật khẩu mặc định; bắt buộc điền `REDIS_PASSWORD` và các secret trước khi chạy.
 
 ---
 
@@ -139,7 +138,7 @@ docker compose restart app
 
 ### Redis AUTH failed
 ```bash
-# Đảm bảo REDIS_PASSWORD trong .env khớp với requirepass trong redis.conf
+# Đảm bảo REDIS_PASSWORD được set trong .env trước khi chạy production compose.
 # Sau khi sửa:
 docker compose down
 docker compose up --build

@@ -13,10 +13,18 @@ DECLARE
         'tasks', 'checkpoints', 'patrol_benchmark_deviations', 'staff', 
         'staff_performance_metrics', 'disciplinary_actions', 'audits', 
         'attendance_records', 'patrol_logs', 'incidents', 'event_outbox', 
-        'feedback', 'audit_logs', 'notifications', 'vendors', 'contracts', 
-        'compliance_scores', 'shift_schedules', 'shift_compliance_items',
+        'feedback', 'audit_logs', 'notifications', 'vendors', 'sites',
+        'guard_posts', 'contracts', 
+        'compliance_scores', 'shift_schedules', 'shift_assignments', 'shift_compliance_items',
         'attachments', 'images', 'monthly_strategy_insights', 
-        'tenant_usage_events', 'checkpoint_benchmark_sessions'
+        'tenant_usage_events', 'checkpoint_benchmark_sessions',
+        'patrol_routes', 'patrol_route_checkpoints', 'patrol_assignments',
+        'shift_sessions', 'patrol_sessions', 'incident_timelines',
+        'incident_evidences', 'incident_sla_rules', 'violation_events',
+        'vendor_scorecards', 'monthly_acceptance_reports', 'penalty_items',
+        'contract_penalty_rules', 'contract_versions', 'contract_line_items',
+        'contract_shift_requirements', 'contract_staff_standards', 'contract_checklist_requirements',
+        'violation_disputes'
     ];
     tbl TEXT;
 BEGIN
@@ -49,10 +57,18 @@ DECLARE
         'tasks', 'checkpoints', 'patrol_benchmark_deviations', 'staff', 
         'staff_performance_metrics', 'disciplinary_actions', 'audits', 
         'attendance_records', 'patrol_logs', 'incidents', 'event_outbox', 
-        'feedback', 'audit_logs', 'notifications', 'vendors', 'contracts', 
-        'compliance_scores', 'shift_schedules', 'shift_compliance_items',
+        'feedback', 'audit_logs', 'notifications', 'vendors', 'sites',
+        'guard_posts', 'contracts', 
+        'compliance_scores', 'shift_schedules', 'shift_assignments', 'shift_compliance_items',
         'attachments', 'images', 'monthly_strategy_insights', 
-        'tenant_usage_events', 'checkpoint_benchmark_sessions'
+        'tenant_usage_events', 'checkpoint_benchmark_sessions',
+        'patrol_routes', 'patrol_route_checkpoints', 'patrol_assignments',
+        'shift_sessions', 'patrol_sessions', 'incident_timelines',
+        'incident_evidences', 'incident_sla_rules', 'violation_events',
+        'vendor_scorecards', 'monthly_acceptance_reports', 'penalty_items',
+        'contract_penalty_rules', 'contract_versions', 'contract_line_items',
+        'contract_shift_requirements', 'contract_staff_standards', 'contract_checklist_requirements',
+        'violation_disputes'
     ];
 BEGIN
     FOREACH tbl IN ARRAY table_list LOOP

@@ -1,10 +1,11 @@
 import React from 'react';
-import { CreditCard, Check, CheckCircle2, Zap, ShieldCheck, Clock, HelpCircle, Loader2 } from 'lucide-react';
+import { CreditCard, Check, CheckCircle2, Zap, Loader2, Plus, ExternalLink, ShieldCheck, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '../../../lib/utils';
 import { SCMDButton } from '../../common/interfaces/components/SCMDButton';
 import { SCMDCard } from '../../common/interfaces/components/SCMDCard';
+import { DashboardPageHeader } from '../../common/interfaces/components/DashboardUI';
 import { useDashboardStore } from '../store/useDashboardStore';
 
 export const BillingTab: React.FC = () => {
@@ -12,19 +13,15 @@ export const BillingTab: React.FC = () => {
     isPro,
     isSubmitting,
     showUpgradeModal,
-    tenantInfo,
     setShowUpgradeModal,
     handleUpgrade
   } = useDashboardStore(useShallow(state => ({
     isPro: state.isPro,
     isSubmitting: state.isSubmitting,
     showUpgradeModal: state.showUpgradeModal,
-    tenantInfo: state.tenantInfo,
     setShowUpgradeModal: state.setShowUpgradeModal,
     handleUpgrade: state.handleUpgrade
   })));
-
-  const hasPendingUpgrade = tenantInfo?.hasPendingUpgrade;
 
   return (
     <>
@@ -32,272 +29,147 @@ export const BillingTab: React.FC = () => {
         key="billing"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700"
+        className="space-y-8 animate-in fade-in duration-500 pb-20"
       >
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-5xl font-black tracking-tighter text-white uppercase">
-                Billing & Plan
-              </h2>
-              <span
-                className={cn(
-                  'px-4 py-1 rounded-full text-[10px] font-black tracking-[0.2em] uppercase border animate-pulse',
-                  isPro
-                    ? 'bg-scmd-cyber/10 border-scmd-cyber text-scmd-cyber shadow-[0_0_15px_rgba(66,133,244,0.2)]'
-                    : 'bg-slate-800 border-slate-700 text-slate-400',
-                )}
-              >
-                {isPro ? 'PRO ACTIVE' : 'FREE CORE'}
-              </span>
-            </div>
-            <p className="text-slate-400 font-medium max-w-lg">
-              Nâng cấp sức mạnh hệ thống với AI Watcher và Báo cáo tự động hóa cao cấp.
-            </p>
-          </div>
+        {/* Bước 1: Unified Billing Header */}
+        <DashboardPageHeader
+          title="Quản lý Gói dịch vụ & Thanh toán"
+          description="Giám sát chu kỳ thanh toán, hạn mức vận hành và cấu hình phương thức chi trả."
+          eyebrow="Subscription"
+        />
 
-          <div className="flex items-center gap-4 bg-slate-900/50 p-4 rounded-[24px] border border-slate-800 backdrop-blur-md">
-            <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center">
-              <CreditCard className="text-scmd-cyber" size={24} />
-            </div>
-            <div>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                Phương thức thanh toán
-              </p>
-              <p className="text-white font-bold text-sm uppercase">Chưa thiết lập</p>
-            </div>
-          </div>
-        </header>
-
-        {/* Plan Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* FREE */}
-          <div
-            className={cn(
-              'relative overflow-hidden group transition-all duration-500',
-              !isPro ? 'scale-100' : 'scale-95 hover:scale-100',
-            )}
-          >
-            <SCMDCard
-              className={cn(
-                'p-8 border-2 transition-all duration-500 rounded-[40px] h-full flex flex-col',
-                !isPro
-                  ? 'border-scmd-silver/20 bg-scmd-surface shadow-2xl'
-                  : 'border-white/5 bg-scmd-surface/40',
-              )}
-            >
-              {!isPro && (
-                <div className="absolute top-8 right-8 bg-scmd-silver/20 text-white p-2 rounded-full border border-white/10">
-                  <Check size={20} strokeWidth={4} />
-                </div>
-              )}
-
-              <div className="mb-8">
-                <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">
-                  Gói cơ bản
-                </p>
-                <h3 className="text-3xl font-black text-white mb-4 tracking-tight uppercase">
-                  SCMD FREE
-                </h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black text-white uppercase">0đ</span>
-                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">
-                    /vĩnh viễn
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-4 mb-10 flex-1">
-                {[
-                  'Khởi tạo dùng cơ bản',
-                  'Tối đa 1 quản lý',
-                  'Tối đa 2 nhân viên',
-                  'Giám sát tuần tra Real-time',
-                  'SOS & Alarm cơ bản',
-                ].map((feat, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
-                      <Check size={10} className="text-slate-400" />
-                    </div>
-                    <span className="text-slate-400 font-semibold text-xs tracking-tight">{feat}</span>
+        {/* Bước 2: Main Billing Grid (70/30) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Cột Trái: Current Subscription Profile */}
+          <div className="lg:col-span-2">
+            <SCMDCard className="h-full bg-slate-900/40 border-white/5 p-6 flex flex-col justify-between">
+              <div className="flex items-start justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-blue-600/10 rounded-2xl flex items-center justify-center border border-blue-500/20">
+                    <ShieldCheck className="text-blue-400" size={28} />
                   </div>
-                ))}
+                  <div>
+                    <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">Gói dịch vụ hiện tại</h3>
+                    <div className="flex items-center gap-3 mt-1">
+                      <p className="text-3xl font-black text-white">{isPro ? 'SCMD PRO' : 'SCMD FREE'}</p>
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase">Đang hoạt động</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Chu kỳ tiếp theo</p>
+                  <p className="text-sm font-bold text-white mt-1">20/06/2024</p>
+                </div>
               </div>
 
+              <div className="grid grid-cols-3 gap-4 border-t border-white/5 pt-6">
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase">Hạn mức Nhân sự</p>
+                  <p className="text-lg font-bold text-white mt-1">{isPro ? 'Không giới hạn' : '02 Nhân sự'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase">Vendor SLA</p>
+                  <p className="text-lg font-bold text-white mt-1">{isPro ? 'Kích hoạt' : 'Bị khóa'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase">Báo cáo PDF</p>
+                  <p className="text-lg font-bold text-white mt-1">{isPro ? 'Nâng cao' : 'Cơ bản'}</p>
+                </div>
+              </div>
+            </SCMDCard>
+          </div>
+
+          {/* Cột Phải: Payment & Invoices */}
+          <div className="lg:col-span-1 space-y-4">
+            <SCMDCard className="bg-slate-900/60 border-white/10 p-6">
+               <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Thanh toán</h3>
+                  <CreditCard size={14} className="text-slate-500" />
+               </div>
+               <p className="text-xs font-medium text-slate-500 mb-6">Bạn chưa thiết lập phương thức thanh toán tự động.</p>
+               <SCMDButton className="w-full h-12 bg-white/5 border border-white/10 text-white font-black uppercase text-[10px] tracking-widest hover:bg-white/10 transition-all">
+                 <Plus size={14} className="mr-2" /> Thêm phương thức
+               </SCMDButton>
+            </SCMDCard>
+            
+            <button className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors group">
+              <div className="flex items-center gap-3">
+                <ExternalLink size={16} className="text-slate-500 group-hover:text-blue-400" />
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest group-hover:text-white">Lịch sử hóa đơn</span>
+              </div>
+              <span className="text-[10px] font-bold text-slate-600 group-hover:text-slate-400">0 bản ghi</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Bước 3: Compact Upgrade Tiers */}
+        <div className="pt-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Zap size={18} className="text-blue-500" />
+            <h2 className="text-sm font-black text-white uppercase tracking-widest">Nâng cấp năng lực vận hành</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* FREE */}
+          <div className={cn('relative opacity-50 grayscale', !isPro && 'opacity-100 grayscale-0')}>
+            <SCMDCard className="p-6 border-white/5 bg-slate-900/20 flex flex-col h-full">
+              <div className="mb-8">
+                <h3 className="text-lg font-black text-slate-300 uppercase tracking-tight">SCMD FREE</h3>
+                <p className="text-4xl font-black text-white mt-4">0đ</p>
+              </div>
               <SCMDButton
-                disabled={!isPro}
-                variant="ghost"
-                className="w-full h-14 rounded-[20px] border-2 border-slate-700 text-slate-500 font-black tracking-widest text-[10px] uppercase mt-auto"
+                disabled
+                className="w-full h-12 bg-white/5 border border-white/5 text-slate-500 font-black uppercase text-[10px] tracking-widest mt-auto"
               >
-                {!isPro ? 'ĐANG SỬ DỤNG' : 'PHIÊN BẢN HIỆN TẠI'}
+                {isPro ? 'PHIÊN BẢN CŨ' : 'ĐANG SỬ DỤNG'}
               </SCMDButton>
             </SCMDCard>
           </div>
 
           {/* PRO */}
-          <div
-            className={cn(
-              'relative overflow-hidden group transition-all duration-700',
-              isPro ? 'scale-105' : 'hover:scale-100',
-            )}
-          >
-            <div className="absolute inset-0 bg-scmd-cyber/10 blur-[100px] opacity-0 group-hover:opacity-100 transition-opacity" />
-
-            <SCMDCard
-              className={cn(
-                'p-8 border-2 transition-all duration-700 rounded-[40px] relative z-10 h-full flex flex-col',
-                isPro
-                   ? 'border-scmd-primary bg-scmd-surface shadow-[0_0_50px_rgba(37,99,235,0.15)]'
-                   : 'border-white/5 bg-scmd-navy/60 hover:border-scmd-primary/50',
-              )}
-            >
-              {isPro && (
-                <div className="absolute top-8 right-8 bg-scmd-primary text-white p-2 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.5)] border border-white/20">
-                  <Check size={20} strokeWidth={4} />
-                </div>
-              )}
-
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-blue-500/20 blur opacity-30 rounded-[28px]" />
+            <SCMDCard className={cn("p-6 border-blue-500/30 bg-slate-900/40 flex flex-col h-full ring-2 ring-blue-500/20")}>
               <div className="mb-8">
-                <div className="flex items-center gap-2 mb-1">
-                  <Zap size={14} className="text-scmd-cyber fill-current" />
-                  <span className="text-scmd-cyber text-[9px] font-black tracking-[0.2em] uppercase">
-                    Khuyên dùng
-                  </span>
-                </div>
-                <h3 className="text-3xl font-black text-white mb-4 tracking-tight uppercase">
+                <h3 className="text-lg font-black text-blue-400 uppercase tracking-tight flex items-center justify-between">
                   SCMD PRO
+                  <CheckCircle2 size={18} className="text-emerald-400" />
                 </h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-white tracking-tighter">99.000</span>
-                  <span className="text-slate-400 text-lg font-black uppercase">đ</span>
-                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest ml-1">
-                    /nhân viên
-                  </span>
-                </div>
+                <p className="text-4xl font-black text-white mt-4">99.000<span className="text-lg ml-1 text-slate-500">đ/NV</span></p>
               </div>
-
-              <div className="space-y-4 mb-10 flex-1">
-                {[
-                  'FULL sức mạnh SCMD CORE',
-                  'AI WATCHER: Chống gian lận hình ảnh',
-                  'Smart Báo cáo PDF & Excel Pro',
-                  'Quản lý Vendor & SLA chuyên sâu',
-                  'AI Strategic Insight Command',
-                  'Hỗ trợ Support 24/7 Priority',
-                  'Tư vấn giải pháp bảo mật 1:1',
-                ].map((feat, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="w-5 h-5 mt-0.5 rounded-full bg-scmd-cyber/10 flex items-center justify-center shrink-0 border border-scmd-cyber/20">
-                      <CheckCircle2 size={12} className="text-scmd-cyber" />
-                    </div>
-                    <span className="text-slate-200 font-bold text-xs tracking-tight">{feat}</span>
-                  </div>
-                ))}
-              </div>
-
               <SCMDButton
-                onClick={() => !isPro && !hasPendingUpgrade && setShowUpgradeModal(true)}
-                disabled={isPro || hasPendingUpgrade}
-                variant={isPro ? 'ghost' : 'primary'}
-                className={cn(
-                  'w-full h-14 rounded-[20px] font-black tracking-widest text-[10px] uppercase transition-all duration-300 mt-auto',
-                  isPro
-                    ? 'border-2 border-scmd-cyber/30 text-scmd-cyber hover:bg-scmd-cyber/10'
-                    : hasPendingUpgrade
-                    ? 'bg-slate-800 text-slate-500 border-2 border-slate-700'
-                    : 'bg-scmd-cyber text-white shadow-2xl shadow-scmd-cyber/30 hover:scale-105 active:scale-95',
-                )}
+                onClick={() => !isPro && setShowUpgradeModal(true)}
+                className="w-full h-12 bg-blue-600 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-600/20 mt-auto"
               >
-                {isPro 
-                  ? 'GÓI CƯỚC HIỆN TẠI' 
-                  : hasPendingUpgrade 
-                  ? 'ĐANG CHỜ PHÊ DUYỆT' 
-                  : 'NÂNG CẤP LÊN PRO NGAY'}
+                {isPro ? 'GÓI ĐANG DÙNG' : 'NÂNG CẤP NGAY'}
               </SCMDButton>
             </SCMDCard>
-
-            <div className="absolute -bottom-10 left-10 right-10 h-20 bg-scmd-cyber/10 blur-[60px] opacity-20 -z-10" />
           </div>
 
           {/* PRO MAX */}
-          <div className="relative overflow-hidden group transition-all duration-700 scale-95 hover:scale-100">
-            <SCMDCard className="p-8 border-2 transition-all duration-500 rounded-[40px] h-full flex flex-col border-slate-800 bg-slate-900/60 hover:border-purple-500/50">
+          <div className="group">
+            <SCMDCard className="p-6 border-white/5 bg-slate-950/40 flex flex-col h-full hover:border-purple-500/40 transition-all">
               <div className="mb-8">
-                <p className="text-purple-400 text-xs font-black uppercase tracking-widest mb-1">
-                  Dành cho tập đoàn
-                </p>
-                <h3 className="text-3xl font-black text-white mb-4 tracking-tight uppercase">
-                  PRO MAX
-                </h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black text-white uppercase">Liên hệ</span>
-                </div>
+                <h3 className="text-lg font-black text-purple-400 uppercase tracking-tight">SCMD PRO MAX</h3>
+                <p className="text-xl font-black text-white mt-4 uppercase">Liên hệ</p>
               </div>
-
-              <div className="space-y-4 mb-10 flex-1">
-                {[
-                  'Toàn bộ tính năng gói SCMD PRO',
-                  'Dedicated Server & Data Isolation',
-                  'SLA 99.99% Guaranteed uptime',
-                  'White-label App for Enterprise',
-                  'API Access & Custom Integration',
-                  'Customize Báo cáo linh hoạt',
-                  'Đội ngũ kỹ thuật hỗ trợ On-site',
-                ].map((feat, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="w-5 h-5 mt-0.5 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0 border border-purple-500/20">
-                      <CheckCircle2 size={12} className="text-purple-400" />
-                    </div>
-                    <span className="text-slate-300 font-semibold text-xs tracking-tight">{feat}</span>
-                  </div>
-                ))}
-              </div>
-
               <SCMDButton
-                disabled
-                variant="ghost"
-                className="w-full h-14 rounded-[20px] border-2 border-purple-500/30 text-purple-400 font-black tracking-widest text-[10px] uppercase mt-auto hover:bg-purple-500/10"
+                onClick={() => window.location.href = '/contact'}
+                className="w-full h-12 bg-white/5 border border-purple-500/20 text-purple-400 font-black uppercase text-[10px] tracking-widest mt-auto hover:bg-purple-500/10"
               >
-                LIÊN HỆ ĐỘI NGŨ KINH DOANH
+                LIÊN HỆ NÂNG CẤP
               </SCMDButton>
             </SCMDCard>
           </div>
         </div>
-
-        {/* Trust footer */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-10">
-          {[
-            {
-              icon: <ShieldCheck />,
-              title: 'Bảo mật Native',
-              desc: 'Cách ly dữ liệu (Isolation) tuyệt đối giữa các doanh nghiệp.',
-            },
-            {
-              icon: <Clock />,
-              title: 'Uptime 99.99%',
-              desc: 'Hạ tầng Cloud Run tự động mở rộng theo nhu cầu tải của bạn.',
-            },
-            {
-              icon: <HelpCircle />,
-              title: 'Sát cánh 24/7',
-              desc: 'Đội ngũ kỹ sư SCMD luôn trực chiến giúp bạn xử lý mọi vấn đề.',
-            },
-          ].map((item, i) => (
-            <div
-              key={i}
-              className="bg-slate-900/40 p-8 rounded-[32px] border border-white/5 hover:border-scmd-cyber/20 transition-all group"
-            >
-              <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-scmd-cyber mb-6 group-hover:scale-110 transition-transform">
-                {item.icon}
-              </div>
-              <h4 className="text-white font-black text-xs uppercase tracking-widest mb-2">
-                {item.title}
-              </h4>
-              <p className="text-slate-500 text-[11px] font-medium leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
         </div>
+
+        <section className="bg-blue-600/5 border border-blue-500/10 rounded-2xl p-4 flex gap-4 items-start">
+           <Info className="text-blue-400 shrink-0" size={18} />
+           <p className="text-xs font-medium text-blue-300 leading-relaxed italic">
+             Mọi thay đổi gói dịch vụ sẽ được áp dụng ngay lập tức cho chu kỳ hiện tại. Khoản thanh toán chênh lệch sẽ được tính vào kỳ hóa đơn tiếp theo (Pro-rated billing).
+           </p>
+        </section>
       </motion.div>
 
       {/* Upgrade Confirm Modal */}

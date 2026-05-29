@@ -3,17 +3,27 @@ export enum UserRole {
   TENANT_ADMIN = 'tenant-admin',
   GUARD = 'guard',
   SUPERVISOR = 'supervisor',
-  TECHNICIAN = 'technician'
+  TECHNICIAN = 'technician',
+  VENDOR_COMMANDER = 'vendor-commander',
+  VENDOR_REPRESENTATIVE = 'vendor-representative'
 }
 
 export type TenantId = string;
+
+export interface ClientContext {
+  ip: string;
+  userAgent: string;
+}
 
 export interface SecurityContext {
   userId: string;
   tenantId: string;
   role: UserRole;
   email?: string;
-  clientContext?: any;
+  assignedVendorId?: string | null;
+  assignedSiteId?: string | null;
+  assignedContractId?: string | null;
+  clientContext?: ClientContext;
 }
 
 export interface AuthContext extends SecurityContext {}
@@ -28,6 +38,8 @@ export interface CreateCheckpointDTO {
   name: string;
   latitude: number;
   longitude: number;
+  siteId?: string;
+  guardPostId?: string;
   qr_hash?: string;
   check_items?: any[];
 }
@@ -37,14 +49,18 @@ export interface ScanQRMetadata {
   location?: LocationDTO;
   timestamp?: Date;
   qr_hash?: string;
+  patrolSessionId?: string;
+  scannedAt?: string;
+  photoEvidenceIds?: string[];
+  note?: string;
   _signature?: string;
   _timestamp?: number | string;
 }
 
-export interface DomainEvent {
+export interface DomainEvent<TPayload = Record<string, unknown>> {
   id: string;
   type: string;
-  payload: any;
+  payload: TPayload;
   occurredAt: Date;
 }
 

@@ -84,6 +84,21 @@ export const trialRegisterLimiter = rateLimit({
   },
 });
 
+export const publicContactLeadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 giờ
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: makeStore('rl:contact_lead:'),
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: 'CONTACT_LEAD_RATE_LIMITED',
+      message: 'Quá nhiều yêu cầu liên hệ. Vui lòng thử lại sau 1 giờ.',
+      retryAfter: 60 * 60,
+    });
+  },
+});
+
 export const sosRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
@@ -155,8 +170,11 @@ export const aiQuotaTracking = async (req: any, res: any, next: any) => {
     // Default limit
     const MAX_QUOTA = 1000;
 
-    // Use raw for atomic JSON increment if possible, or simple transaction
-    await db.system().$executeRaw`
+    // [FIX M-01]: Dùng INSERT ... ON CONFLICT ... RETURNING để atomic increment + read trong 1 query.
+    // Trước đây: $executeRaw (tăng) rồi findUnique (đọc) là 2 ops tách biệt → race condition:
+    // burst request có thể vượt quota 1000 lượt vì mỗi request đọc giá trị cũ trước khi commit.
+    // RETURNING trả về giá trị SAU khi update → check tức thì, không có race window.
+    const rows = await db.system().$queryRaw<{ usage: number }[]>`
       INSERT INTO system_configs (id, key, value, updated_at) 
       VALUES (${quotaKey}, ${quotaKey}, ${JSON.stringify({ usage: 1 })}::jsonb, now())
       ON CONFLICT (key) DO UPDATE 
@@ -166,14 +184,10 @@ export const aiQuotaTracking = async (req: any, res: any, next: any) => {
         ((COALESCE((system_configs.value->>'usage')::int, 0) + 1)::text)::jsonb
       ),
       updated_at = now()
+      RETURNING (value->>'usage')::int AS usage
     `;
 
-    // Read current
-    const current = await db.system().systemConfig.findUnique({
-      where: { key: quotaKey }
-    });
-
-    const used = current?.value ? (current.value as any).usage : 0;
+    const used = rows[0]?.usage ?? 1;
     if (used > MAX_QUOTA) {
       return res.status(429).json({
         error: 'AI_QUOTA_EXCEEDED',

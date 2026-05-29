@@ -51,9 +51,10 @@ export const AttendanceModule: React.FC = () => {
         setLocation(loc);
       }
       
-      await apiFetch(`/api/tenant/attendance/${type.toLowerCase().replace('_', '-')}`, {
+      await apiFetch('/api/security/attendance/check', {
         method: 'POST',
         body: JSON.stringify({
+          type,
           location: loc,
           notes: ''
         }),
@@ -62,12 +63,12 @@ export const AttendanceModule: React.FC = () => {
       setIsCheckedIn(type === 'CHECK_IN');
       if (type === 'CHECK_IN') setLastCheckIn(new Date());
 
-      setMessage({ text: type === 'CHECK_IN' ? 'Check-in thành công!' : 'Check-out thành công!', type: 'success' });
+      setMessage({ text: type === 'CHECK_IN' ? 'Vào ca thành công!' : 'Kết thúc ca thành công!', type: 'success' });
     } catch (err: any) {
       if (err.message === 'ALREADY_CHECKED_IN') {
-        setMessage({ text: 'Bạn đã check-in rồi!', type: 'error' });
+        setMessage({ text: 'Bạn đã vào ca rồi!', type: 'error' });
       } else {
-        setMessage({ text: err.message || `Lỗi khi ${type === 'CHECK_IN' ? 'Check-in' : 'Check-out'}`, type: 'error' });
+        setMessage({ text: err.message || `Lỗi khi ${type === 'CHECK_IN' ? 'vào ca' : 'kết thúc ca'}`, type: 'error' });
       }
     } finally {
       setIsSubmitting(false);
@@ -120,7 +121,7 @@ export const AttendanceModule: React.FC = () => {
 
         {isCheckedIn && lastCheckIn && (
           <div className="text-sm font-medium text-slate-400 text-center">
-            Bạn đã check-in lúc <span className="text-white font-bold">{lastCheckIn.toLocaleTimeString('vi-VN')}</span>
+            Bạn đã vào ca lúc <span className="text-white font-bold">{lastCheckIn.toLocaleTimeString('vi-VN')}</span>
           </div>
         )}
 
@@ -136,7 +137,7 @@ export const AttendanceModule: React.FC = () => {
             )}
           >
             <LogIn size={32} />
-            <span className="font-black text-sm uppercase tracking-wider">Vào ca (Check In)</span>
+            <span className="font-black text-sm uppercase tracking-wider">Bắt đầu ca trực</span>
           </button>
 
           <button
@@ -150,7 +151,7 @@ export const AttendanceModule: React.FC = () => {
             )}
           >
             <LogOut size={32} />
-            <span className="font-black text-sm uppercase tracking-wider">Ra ca (Check Out)</span>
+            <span className="font-black text-sm uppercase tracking-wider">Kết thúc ca trực</span>
           </button>
         </div>
 

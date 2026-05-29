@@ -13,7 +13,7 @@ export const upload = multer({
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Only images are allowed'));
+      cb(new Error('Chỉ cho phép tải lên tệp hình ảnh'));
     }
   }
 });
@@ -27,7 +27,7 @@ export const validateMagicBytes = async (req: Request, res: Response, next: Next
     const { fileTypeFromBuffer } = await import('file-type');
     const detected = await fileTypeFromBuffer(req.file.buffer);
     if (!detected || !detected.mime.startsWith('image/')) {
-      return res.status(400).json({ error: 'Invalid file type. File magic bytes do not match expected image type.' });
+      return res.status(400).json({ error: 'Loại tệp không hợp lệ. Nội dung tệp không khớp với định dạng hình ảnh được phép.' });
     }
     next();
   } catch (error) {

@@ -91,4 +91,15 @@ describe('CompletePatrolUseCase', () => {
       status: 'WARNING'
     }));
   });
+
+  describe('Enforcement Checklist (Functional Gap)', () => {
+    it.todo('should create a ViolationEvent (e.g. MISSING_EVIDENCE) when mandatory checklist items lack evidence', async () => {
+      // Khoảng trống chức năng:
+      // Luồng hiện tại chưa đọc `ContractChecklistRequirement` để kiểm tra các item bắt buộc có hình ảnh/bằng chứng hay không.
+      // Nếu guard hoàn thành patrol nhưng không chụp ảnh kho (dù hợp đồng bắt buộc), hệ thống phải phát hiện
+      // và tự động tạo `ViolationEvent` như `MISSING_EVIDENCE` hoặc `INCOMPLETE_PATROL_CHECKLIST`.
+      // Dữ liệu này sau đó sẽ được sử dụng bởi Penalty Engine để tính phạt nếu có `ContractPenaltyRule` tương ứng.
+      // Hiện tại luồng CompletePatrolUseCase chỉ ghi log bình thường, chưa liên kết với Contract Rule Engine.
+    });
+  });
 });

@@ -17,12 +17,14 @@ import {
   TrendingUp,
   User,
   Phone,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../../../lib/utils';
 import { useDebounce } from '../../../common/hooks/useDebounce';
+import { EmptyState } from './EmptyState.js';
 
 interface Tenant {
   id: string;
@@ -39,9 +41,7 @@ interface Tenant {
   contactPhone?: string;
   ownerName?: string;
   features_enabled: {
-    patrol: boolean;
-    attendance: boolean;
-    ai_analytics: boolean;
+    [key: string]: boolean;
   };
 }
 
@@ -58,6 +58,9 @@ interface TenantListProps {
   updatingSubscriptionId: string | null;
   onLoadMore?: () => void;
   hasMore?: boolean;
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 // Helper: normalize subscriptionPlan from either field
@@ -81,7 +84,10 @@ export const TenantList: React.FC<TenantListProps> = ({
   setShowOnboarding,
   updatingSubscriptionId,
   onLoadMore,
-  hasMore
+  hasMore,
+  isLoading = false,
+  error,
+  onRetry
 }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,6 +123,8 @@ export const TenantList: React.FC<TenantListProps> = ({
 
   const totalPro = tenants.filter(tn => getEffectivePlan(tn) === 'PRO').length;
   const totalActive = tenants.filter(tn => tn.status === 'active').length;
+
+  const showInitialSkeleton = isLoading && tenants.length === 0;
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -233,24 +241,69 @@ export const TenantList: React.FC<TenantListProps> = ({
         </div>
       </div>
 
-      {/* Empty state */}
-      {filteredTenants.length === 0 && (
-        <div className="text-center py-24 bg-slate-900/30 border border-white/5 rounded-[32px]">
-          <Building2 size={48} className="mx-auto mb-4 text-slate-700" />
-          <p className="text-slate-500 font-bold text-lg">Chưa có khách hàng nào</p>
-          <p className="text-slate-600 text-sm mt-1">Bắt đầu bằng cách thêm khách hàng đầu tiên</p>
-          <button
-            onClick={() => setShowOnboarding(true)}
-            className="mt-6 h-12 px-8 bg-sky-500/10 border border-sky-500/30 text-sky-400 rounded-2xl font-black text-sm hover:bg-sky-500/20 transition-all"
-          >
-            + Thêm khách hàng mới
-          </button>
-        </div>
+      {error && !showInitialSkeleton && (
+        <EmptyState
+          icon={<AlertTriangle size={32} />}
+          title="Không thể tải danh sách khách hàng"
+          description={error}
+          action={onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={isLoading}
+              className="h-12 px-8 bg-sky-500/10 border border-sky-500/30 text-sky-400 rounded-2xl font-black text-sm hover:bg-sky-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              Thử tải lại
+            </button>
+          )}
+        />
+      )}
+
+      {!error && !showInitialSkeleton && filteredTenants.length === 0 && (
+        <EmptyState
+          icon={<Building2 size={32} />}
+          title="Chưa có khách hàng nào"
+          description="Bắt đầu bằng cách thêm khách hàng đầu tiên hoặc điều chỉnh bộ lọc hiện tại."
+          action={(
+            <button
+              type="button"
+              onClick={() => setShowOnboarding(true)}
+              className="h-12 px-8 bg-sky-500/10 border border-sky-500/30 text-sky-400 rounded-2xl font-black text-sm hover:bg-sky-500/20 transition-all"
+            >
+              + Thêm khách hàng mới
+            </button>
+          )}
+        />
       )}
 
       {/* Tenant grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredTenants.map((tenant, idx) => (
+        {showInitialSkeleton && Array.from({ length: 6 }).map((_, idx) => (
+          <div key={`tenant-skeleton-${idx}`} className="h-[360px] rounded-[32px] border border-white/5 bg-slate-900/30 p-6 animate-pulse">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-2xl bg-slate-800/70" />
+                <div className="space-y-3">
+                  <div className="h-4 w-36 rounded bg-slate-800/70" />
+                  <div className="h-3 w-24 rounded bg-slate-800/50" />
+                </div>
+              </div>
+              <div className="h-8 w-20 rounded-xl bg-slate-800/60" />
+            </div>
+            <div className="mt-8 grid grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((__, itemIdx) => <div key={itemIdx} className="h-16 rounded-2xl bg-slate-800/40" />)}
+            </div>
+            <div className="mt-8 space-y-3">
+              <div className="h-3 w-full rounded bg-slate-800/50" />
+              <div className="h-3 w-2/3 rounded bg-slate-800/40" />
+            </div>
+            <div className="mt-8 flex justify-end gap-2">
+              <div className="h-10 w-10 rounded-xl bg-slate-800/50" />
+              <div className="h-10 w-24 rounded-xl bg-slate-800/50" />
+            </div>
+          </div>
+        ))}
+        {!showInitialSkeleton && !error && filteredTenants.map((tenant, idx) => (
           <motion.div
             key={tenant.id}
             initial={{ opacity: 0, y: 20 }}
@@ -273,7 +326,7 @@ export const TenantList: React.FC<TenantListProps> = ({
         ))}
       </div>
 
-      {hasMore && (
+      {hasMore && !error && (
         <div className="flex justify-center mt-8">
           <button
             onClick={onLoadMore}
@@ -346,7 +399,7 @@ const TenantCard: React.FC<TenantCardProps> = ({
   return (
     <div 
       className={cn(
-        "group h-full bg-scmd-navy/40 backdrop-blur-xl border rounded-[32px] overflow-hidden transition-all duration-500 flex flex-col hover:shadow-2xl hover:shadow-scmd-primary/10 hover:-translate-y-1 relative",
+        "group h-full bg-scmd-navy/40 backdrop-blur-xl border rounded-[32px] overflow-hidden transition-all flex flex-col hover:shadow-2xl hover:shadow-scmd-primary/10 relative",
         isActive 
           ? isPro 
             ? "border-scmd-primary/30" 
@@ -371,7 +424,7 @@ const TenantCard: React.FC<TenantCardProps> = ({
         <div className="flex items-start justify-between mb-8">
           <div className="flex items-center gap-4">
              <div className={cn(
-              "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-transform duration-500 group-hover:scale-110",
+              "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border-2",
               isPro 
                 ? "bg-scmd-primary/10 border-scmd-primary/20 text-scmd-primary shadow-[0_0_20px_rgba(37,99,235,0.1)]" 
                 : "bg-scmd-surface border-white/5 text-scmd-silver/30"
@@ -489,9 +542,9 @@ const TenantCard: React.FC<TenantCardProps> = ({
 
         {/* Feature Tags Row */}
         <div className="flex flex-wrap gap-2 mb-8">
-           <FeatureTag active={!!tenant.features_enabled?.patrol} label="Patrol" />
-           <FeatureTag active={!!tenant.features_enabled?.attendance} label="FaceID" />
-           <FeatureTag active={!!tenant.features_enabled?.ai_analytics} label="AI Watch" />
+           <FeatureTag active={!!tenant.features_enabled?.patrol_route} label="Patrol Route" />
+           <FeatureTag active={!!tenant.features_enabled?.vendor_commander} label="Vendor Commander" />
+           <FeatureTag active={!!tenant.features_enabled?.monthly_acceptance_report} label="Monthly Report" />
         </div>
 
         {/* Primary Command Actions */}
@@ -572,18 +625,18 @@ const TenantCard: React.FC<TenantCardProps> = ({
                   <div className="grid grid-cols-1 gap-2">
                     <QuickToggle 
                       label="Tuần tra bảo vệ" 
-                      active={!!tenant.features_enabled?.patrol} 
-                      onClick={() => onFeatureToggle(tenant.id, 'patrol', !!tenant.features_enabled?.patrol)} 
+                      active={!!tenant.features_enabled?.patrol_route} 
+                      onClick={() => onFeatureToggle(tenant.id, 'patrol_route', !!tenant.features_enabled?.patrol_route)} 
                     />
                     <QuickToggle 
                       label="Chấm công FaceID" 
-                      active={!!tenant.features_enabled?.attendance} 
-                      onClick={() => onFeatureToggle(tenant.id, 'attendance', !!tenant.features_enabled?.attendance)} 
+                      active={!!tenant.features_enabled?.vendor_commander} 
+                      onClick={() => onFeatureToggle(tenant.id, 'vendor_commander', !!tenant.features_enabled?.vendor_commander)} 
                     />
                     <QuickToggle 
                       label="AI Watcher Monitor" 
-                      active={!!tenant.features_enabled?.ai_analytics} 
-                      onClick={() => onFeatureToggle(tenant.id, 'ai_analytics', !!tenant.features_enabled?.ai_analytics)} 
+                      active={!!tenant.features_enabled?.monthly_acceptance_report} 
+                      onClick={() => onFeatureToggle(tenant.id, 'monthly_acceptance_report', !!tenant.features_enabled?.monthly_acceptance_report)} 
                     />
                   </div>
                </div>

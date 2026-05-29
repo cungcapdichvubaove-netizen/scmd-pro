@@ -1,66 +1,130 @@
-# Dockerfile được thiết kế siêu gọn cho phiên bản cá nhân/desktop
-# [FIX M-03] Convert CRLF → LF (file gốc có CRLF gây lỗi trên Linux/macOS)
-# [FIX H-06] Bỏ COPY node_modules từ host — tránh platform mismatch và cache poisoning
+# syntax=docker/dockerfile:1.7
+# ============================================================
+# Dockerfile.desktop v4.2 — Fix npm crash + Prisma binary
+# ============================================================
+# THAY ĐỔI SO VỚI v4.1:
+#
+#   • [FIX D-01]: npm 10.9.8 + Node 22 Alpine = "Exit handler never called"
+#     Nguyên nhân: Bug nội bộ npm 10.x khi chạy trên Node 22 với musl libc (Alpine).
+#     Fix: Upgrade npm lên phiên bản mới nhất (11.x) TRƯỚC khi chạy npm ci.
+#     Ref: https://github.com/npm/cli/issues/7629
+#
+#   • [FIX D-02]: Prisma postinstall download binary gây ECONNRESET trong deps stage.
+#     Nguyên nhân: @prisma/engines chạy postinstall.js tải binary từ internet.
+#     Fix: PRISMA_SKIP_POSTINSTALL_GENERATE=true trong deps stage.
+#     Binary được generate đúng cách ở builder stage qua `npx prisma generate`.
+#
+#   • [FIX D-03]: Thiếu binaryTargets cho Alpine (musl libc).
+#     Nguyên nhân: Không khai báo target → Prisma tải sai binary platform.
+#     Fix: Thêm ENV PRISMA_QUERY_ENGINE_TYPE=binary và binaryTarget phù hợp
+#     được handle qua `npx prisma generate` trong builder với đúng platform.
+#
+# GIỮ NGUYÊN từ v4.1:
+#   • [FIX C-01]: COPY --from=builder /app/docs ./docs (không lấy từ host context)
+#   • RUN mkdir -p /app/docs trong builder (phòng thủ nếu docs/ rỗng)
+# ============================================================
 
-# 1. Base Image - Build Frontend & Backend
-FROM node:22-alpine AS builder
-
+# ── Stage 1: deps — cache khi package.json không đổi ───────
+FROM node:22-alpine AS deps
 WORKDIR /app
 
-# [FIX H-06] Install trong container đúng platform, KHÔNG copy node_modules từ host
+# Skip download binary của Puppeteer (không cần Chromium trong image này)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
+# [FIX D-02]: Skip Prisma postinstall binary download trong deps stage.
+# Binary không cần thiết ở đây — `npx prisma generate` ở builder stage
+# sẽ generate đúng binary cho platform linux-musl (Alpine).
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
+ENV NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+ENV NPM_CONFIG_MAXSOCKETS=5
+ENV NPM_CONFIG_FETCH_TIMEOUT=300000
+ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=10000
+ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
+ENV NPM_CONFIG_FETCH_RETRIES=5
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+
+# [FIX D-01]: Upgrade npm từ 10.9.8 lên phiên bản mới nhất (11.x) trước npm ci.
+# npm 10.x có bug "Exit handler never called" trên Node 22 Alpine (musl libc).
+# Upgrade này fix crash sau 18+ phút build không có error message rõ ràng.
+RUN --mount=type=cache,target=/root/.npm \
+    for attempt in 1 2 3; do \
+      npm install -g npm@11.6.2 \
+        --no-audit \
+        --no-fund \
+        --loglevel=warn && break; \
+      rc=$?; \
+      if [ "$attempt" = "3" ]; then exit "$rc"; fi; \
+      sleep $((attempt * 20)); \
+    done
+
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts --fetch-timeout=120000
-# FIX: --ignore-scripts bỏ qua postinstall của esbuild (chmod binary)
-# Chạy thủ công để đảm bảo binary có quyền execute
-RUN node node_modules/esbuild/install.js
+RUN --mount=type=cache,target=/root/.npm \
+    for attempt in 1 2 3; do \
+      npm ci \
+        --prefer-offline \
+        --no-audit \
+        --no-fund \
+        --maxsockets=5 \
+        --loglevel=warn && break; \
+      rc=$?; \
+      if [ "$attempt" = "3" ]; then exit "$rc"; fi; \
+      sleep $((attempt * 30)); \
+    done
+
+# ── Stage 2: builder — cache khi source không đổi ──────────
+FROM deps AS builder
+WORKDIR /app
+
+ARG VITE_TURNSTILE_SITE_KEY=""
+ARG VITE_API_URL=""
+ARG VITE_SOCKET_URL=""
+ARG VITE_SOCKET_PATH="/socket.io"
+ENV VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_SOCKET_URL=${VITE_SOCKET_URL}
+ENV VITE_SOCKET_PATH=${VITE_SOCKET_PATH}
 
 COPY . .
-# Tạo Prisma Client và Build App
+
+# [FIX C-01]: Đảm bảo /app/docs luôn tồn tại trong builder
+# dù docs/ vắng mặt trên host hoặc bị .dockerignore loại trừ một phần
+RUN mkdir -p /app/docs
+
+# [FIX D-02 cont.]: Bật lại generate ở builder stage để Prisma
+# tạo đúng client + binary cho platform linux-musl (Alpine/Node 22).
+# PRISMA_SKIP_POSTINSTALL_GENERATE không được set ở đây — kế thừa từ deps
+# nhưng npx prisma generate chạy trực tiếp nên không bị ảnh hưởng.
 RUN npx prisma generate
 RUN npm run build
 
-# 2. Production Runtime Image
+# ── Stage 3: runner — image tối giản, không có Chromium ────
 FROM node:22-alpine AS runner
-
 WORKDIR /app
 
-# Cài đặt Chromium native cho Puppeteer xuất PDF không bị phình to
-RUN apk add --no-cache \
-      chromium \
-      nss \
-      freetype \
-      freetype-dev \
-      harfbuzz \
-      ca-certificates \
-      ttf-freefont
-
-# Thiết lập biến môi trường quan trọng
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
-# Copy dependencies từ builder (đã bao gồm Prisma Client)
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
-
-# Copy Prisma schema và Migration files để chạy ở init
 COPY prisma ./prisma
 COPY run-migration.mjs ./
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
-# Copy source từ builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
+# src/ và tsconfig cần cho: tsx src/server/modules/auth/seed.ts (khi AUTO_SEED=true)
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig*.json ./
+# [FIX C-01]: Lấy docs/ từ builder thay vì host context
+# Builder đã có docs/ qua `COPY . .` (được re-include trong .dockerignore)
+# và mkdir -p /app/docs đảm bảo không fail nếu docs/ rỗng
+COPY --from=builder /app/docs ./docs
 
-# Setup directories for uploads and set permissions
 RUN mkdir -p /app/public/assets && chown -R node:node /app/public/assets
 
-# Không chạy dưới quyền Root để tăng cường an ninh
 USER node
-
 EXPOSE 3000
 CMD ["./entrypoint.sh"]
-

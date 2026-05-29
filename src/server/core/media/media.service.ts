@@ -11,8 +11,10 @@ export class MediaService {
     if (this.provider) return this.provider;
 
     // Fetch config from DB
-    const config = await db.system().systemConfig.findUnique({
-      where: { key: 'STORAGE_CONFIG' }
+    const config = await db.withTenant('SYSTEM', async (tx) => {
+      return await tx.systemConfig.findUnique({
+        where: { key: 'STORAGE_CONFIG' }
+      });
     });
 
     if (config) {
@@ -30,7 +32,8 @@ export class MediaService {
         region: 'auto',
         endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
         accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        publicUrlPrefix: process.env.R2_PUBLIC_URL_PREFIX,
       });
       return this.provider;
     }
@@ -87,5 +90,32 @@ export class MediaService {
 
   static async refreshConfig() {
     this.provider = null;
+  }
+
+  static async uploadBinary(
+    file: Buffer,
+    context: { tenantId: string; scope: string; fileName: string; contentType?: string }
+  ): Promise<UploadResult> {
+    const provider = await this.getProvider();
+    const date = new Date().toISOString().split('T')[0] || 'unknown-date';
+    const safeName = context.fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
+    const path = `tenant/${context.tenantId}/${context.scope}/${date}/${safeName}`;
+    return provider.upload(file, path, { contentType: context.contentType || 'application/octet-stream' });
+  }
+
+  static async downloadBinary(storageKey: string): Promise<Buffer> {
+    const provider = await this.getProvider();
+    if (!provider.download) {
+      throw new Error(`Provider ${provider.name} does not support binary download`);
+    }
+    return provider.download(storageKey);
+  }
+
+  static async changeStorageClass(storageKey: string, storageClass: 'STANDARD' | 'COLD'): Promise<void> {
+    const provider = await this.getProvider();
+    if (!provider.changeStorageClass) {
+      throw new Error(`Provider ${provider.name} does not support storage class changes`);
+    }
+    await provider.changeStorageClass(storageKey, storageClass);
   }
 }

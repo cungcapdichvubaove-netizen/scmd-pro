@@ -81,6 +81,48 @@ export class Scheduler {
         }
       );
       logger.info('Task Deadline Check scheduled (every hour)');
+
+      await getLightQueue().add(
+        'INCIDENT_SLA_ESCALATION_CHECK',
+        { type: 'INCIDENT_SLA_ESCALATION_CHECK' },
+        {
+          repeat: {
+            every: 60000,
+          },
+          jobId: 'incident_sla_escalation_check_singleton',
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
+      logger.info('Incident SLA escalation check scheduled (every 1 minute)');
+
+      await getLightQueue().add(
+        'PATROL_MISSED_CHECK',
+        { type: 'PATROL_MISSED_CHECK' },
+        {
+          repeat: {
+            every: 60000,
+          },
+          jobId: 'patrol_missed_check_singleton',
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
+      logger.info('Patrol missed assignment check scheduled (every 1 minute)');
+
+      await getLightQueue().add(
+        'SHIFT_STAFFING_CHECK',
+        { type: 'SHIFT_STAFFING_CHECK' },
+        {
+          repeat: {
+            every: 300000,
+          },
+          jobId: 'shift_staffing_check_singleton',
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
+      logger.info('Shift staffing shortage check scheduled (every 5 minutes)');
       
       // 6. Monthly AI Strategy Analysis (1st day of every month at 3 AM)
       const { getHeavyQueue } = await import('./index.js');
@@ -97,6 +139,20 @@ export class Scheduler {
         }
       );
       logger.info('Monthly AI Strategy Analysis scheduled (monthly at 1st day 3AM)');
+
+      await getHeavyQueue().add(
+        'MONTHLY_COMPLIANCE',
+        { type: 'MONTHLY_COMPLIANCE' },
+        {
+          repeat: {
+            pattern: '30 2 1 * *', // 2:30 AM on 1st day of month
+          },
+          jobId: 'monthly_compliance_singleton',
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
+      logger.info('Monthly compliance reconciliation scheduled (monthly at 1st day 2:30AM)');
 
       // 7. ⚡ PROACTIVE SLO MONITORING (Every 1 minute)
       await getLightQueue().add(
@@ -143,20 +199,34 @@ export class Scheduler {
       );
       logger.info('Audit Log Cleanup scheduled (Weekly at Sun 4AM)');
 
-      // 10. Auto Downgrade & Subscription Warning (Daily at 1 AM)
-      await getLightQueue().add(
+      // 10. Auto Downgrade & Subscription Warning (Daily at 1:30 AM)
+      const lightQueue = getLightQueue();
+      const repeatableJobs = await lightQueue.getRepeatableJobs();
+      const legacySubscriptionDowngradeJobs = repeatableJobs.filter(
+        (job) => job.name === 'SUBSCRIPTION_AUTO_DOWNGRADE' && job.pattern === '0 1 * * *'
+      );
+
+      for (const job of legacySubscriptionDowngradeJobs) {
+        const removed = await lightQueue.removeRepeatableByKey(job.key);
+        logger.warn(
+          { repeatableKey: job.key, removed },
+          'Removed legacy subscription auto-downgrade schedule at 1AM'
+        );
+      }
+
+      await lightQueue.add(
         'SUBSCRIPTION_AUTO_DOWNGRADE',
         { type: 'SUBSCRIPTION_AUTO_DOWNGRADE' },
         {
           repeat: {
-            pattern: '0 1 * * *', // Every day at 1 AM
+            pattern: '30 1 * * *', // Every day at 1:30 AM, after shift reconciliation
           },
           jobId: 'subscription_auto_downgrade_singleton',
           removeOnComplete: true,
           removeOnFail: true,
         }
       );
-      logger.info('Subscription Auto-Downgrade & Warning scheduled (daily at 1AM)');
+      logger.info('Subscription Auto-Downgrade & Warning scheduled (daily at 1:30AM)');
 
     } catch (err) {
       logger.error({ err }, 'Failed to schedule automated jobs');

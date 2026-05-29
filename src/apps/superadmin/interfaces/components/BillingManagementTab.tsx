@@ -49,7 +49,7 @@ export const BillingManagementTab: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[#CCD6F6]">Billing & Subscriptions (v2.0)</h1>
+          <h1 className="text-xl font-bold text-scmd-admin-text-muted">Billing & Subscriptions (v2.0)</h1>
           <p className="text-sm text-[#8892B0] mt-1">
             Quản lý tài chính, kích hoạt thuê bao và giám sát doanh thu.
           </p>
@@ -58,7 +58,7 @@ export const BillingManagementTab: React.FC = () => {
           <button 
             onClick={() => setRefreshKey(k => k + 1)}
             disabled={loading}
-            className="h-12 w-12 flex items-center justify-center rounded-xl bg-[#112240] border border-white/5 text-[#8892B0] hover:text-white transition-all"
+            className="h-12 w-12 flex items-center justify-center rounded-xl bg-scmd-admin-rail border border-white/5 text-[#8892B0] hover:text-white transition-all"
           >
             <RefreshCcw size={20} className={loading ? 'animate-spin' : ''} />
           </button>

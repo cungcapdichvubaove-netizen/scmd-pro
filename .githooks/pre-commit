@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+npm run security:scan
+npm run architecture:scan
+npm run version:check

@@ -3,9 +3,6 @@
 
 generator client {
   provider        = "prisma-client-js"
-  // FIX: "driverAdapters" đã stable trong Prisma 6.x, không cần previewFeatures
-  // FIX: "tracing" cần @prisma/instrumentation, giữ lại nhưng bỏ driverAdapters khỏi preview
-  previewFeatures = ["tracing"]
   binaryTargets   = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -42,6 +39,8 @@ model Checkpoint {
   tenantId  String   @map("tenant_id")
   name      String   @map("name")
   status    String   @default("active") @map("status")
+  siteId    String?  @map("site_id")
+  guardPostId String? @map("guard_post_id")
   qrHash    String   @default("") @map("qr_hash")
   checkItems Json?    @map("check_items")
   // PostGIS geography column - defined as Unsupported in Prisma DSL for manual raw queries
@@ -58,10 +57,15 @@ model Checkpoint {
   benchmarkSessionCount Int?      @default(0) @map("benchmark_session_count")
 
   logs      PatrolLog[]
+  routeCheckpoints PatrolRouteCheckpoint[]
   deviations PatrolBenchmarkDeviation[]
   benchmarkSessions CheckpointBenchmarkSession[]
+  site      Site?    @relation(fields: [siteId], references: [id])
+  guardPost GuardPost? @relation(fields: [guardPostId], references: [id])
 
   @@index([tenantId, status])
+  @@index([tenantId, siteId])
+  @@index([tenantId, guardPostId])
   @@index([createdAt])
   @@map("checkpoints")
 }
@@ -121,8 +125,12 @@ model Staff {
   email     String   @unique @map("email")
   password  String   @default("") @map("password")
   fullName  String   @map("full_name")
+  staffId   String?  @map("staff_id")
   phone     String?  @map("phone")
   role      String   @default("guard") @map("role")
+  assignedVendorId String? @map("assigned_vendor_id")
+  assignedSiteId String? @map("assigned_site_id")
+  assignedContractId String? @map("assigned_contract_id")
   status    String   @default("active") @map("status")
   tokenVersion Int     @default(1) @map("token_version")
   qualifications String[] @default([]) @map("qualifications")
@@ -137,15 +145,27 @@ model Staff {
 
   logs      PatrolLog[]
   attendanceRecords AttendanceRecord[]
+  shiftAssignments ShiftAssignment[]
+  patrolAssignments PatrolAssignment[]
+  shiftSessions ShiftSession[]
+  patrolSessions PatrolSession[]
   performanceMetrics StaffPerformanceMetric[]
   disciplinaryActions DisciplinaryAction[]
   reportedIncidents Incident[] @relation("IncidentReporter")
   assignedIncidents Incident[] @relation("IncidentAssignee")
+  resolvedIncidents Incident[] @relation("IncidentResolver")
+  approvedIncidents Incident[] @relation("IncidentApprover")
+  closedIncidents Incident[] @relation("IncidentCloser")
   benchmarkDeviations PatrolBenchmarkDeviation[]
 
+  @@unique([tenantId, staffId])
   @@index([tenantId, status])
   @@index([tenantId, id])
   @@index([role])
+  @@index([tenantId, assignedVendorId])
+  @@index([tenantId, assignedSiteId])
+  @@index([tenantId, assignedContractId])
+  @@index([tenantId, staffId])
   @@index([idNumber])
   @@map("staff")
 }
@@ -219,20 +239,24 @@ model AttendanceRecord {
   notes       String?  @map("notes")
 
   shiftScheduleId   String?   @map("shift_schedule_id")
+  shiftSessionId    String?   @map("shift_session_id")
   checkInAt         DateTime? @map("check_in_at")
   checkOutAt        DateTime? @map("check_out_at")
   workedMinutes     Int?      @map("worked_minutes")
   lateMinutes       Int?      @default(0) @map("late_minutes")
   earlyLeaveMinutes Int?      @default(0) @map("early_leave_minutes")
+  metadata          Json?     @map("metadata")
 
   createdAt   DateTime @default(now()) @map("created_at")
 
   staff       Staff    @relation(fields: [staffId], references: [id])
   shiftSchedule ShiftSchedule? @relation(fields: [shiftScheduleId], references: [id])
+  shiftSession  ShiftSession? @relation(fields: [shiftSessionId], references: [id])
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, id])
   @@index([tenantId, shiftScheduleId])
+  @@index([tenantId, shiftSessionId])
   @@index([staffId, createdAt(sort: Desc)])
   @@map("attendance_records")
 }
@@ -242,21 +266,224 @@ model PatrolLog {
   tenantId     String     @map("tenant_id")
   staffId      String     @map("staff_id")
   checkpointId String     @map("checkpoint_id")
+  patrolSessionId String?  @map("patrol_session_id")
+  routeCheckpointId String? @map("route_checkpoint_id")
+  sequenceActual Int?      @map("sequence_actual")
+  scannedAt    DateTime?   @map("scanned_at")
+  photoEvidenceIds String[] @default([]) @map("photo_evidence_ids")
+  note         String?      @map("note")
+  validationStatus String  @default("VALID") @map("validation_status")
+  exceptionCodes String[]  @default([]) @map("exception_codes")
   metadata     Json?      @map("metadata")
   checkpoint   Checkpoint @relation(fields: [checkpointId], references: [id])
   staff        Staff      @relation(fields: [staffId], references: [id])
+  patrolSession PatrolSession? @relation(fields: [patrolSessionId], references: [id])
+  routeCheckpoint PatrolRouteCheckpoint? @relation(fields: [routeCheckpointId], references: [id])
   createdAt    DateTime   @default(now()) @map("created_at")
 
   @@index([tenantId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([tenantId, id])
   @@index([tenantId, staffId, createdAt(sort: Desc)])
+  @@index([tenantId, patrolSessionId, createdAt])
+  @@index([tenantId, validationStatus])
   @@map("patrol_logs")
+}
+
+model PatrolRoute {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  name            String   @map("name")
+  description     String?  @map("description")
+  siteId          String?  @map("site_id")
+  contractId      String?  @map("contract_id")
+  vendorId        String?  @map("vendor_id")
+  positionName    String?  @map("position_name")
+  status          String   @default("DRAFT") @map("status")
+  estimatedMinutes Int?    @map("estimated_minutes")
+  requiredCompletionPercent Int @default(100) @map("required_completion_percent")
+  repeatIntervalMinutes Int? @map("repeat_interval_minutes")
+  complianceConfig Json?   @map("compliance_config")
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  checkpoints     PatrolRouteCheckpoint[]
+  assignments     PatrolAssignment[]
+  sessions        PatrolSession[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, siteId])
+  @@index([tenantId, contractId])
+  @@index([tenantId, vendorId])
+  @@map("patrol_routes")
+}
+
+model PatrolRouteCheckpoint {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  routeId         String   @map("route_id")
+  checkpointId    String   @map("checkpoint_id")
+  guardPostId     String?  @map("guard_post_id")
+  sequence        Int      @map("sequence")
+  isRequired      Boolean  @default(true) @map("is_required")
+  minOffsetMinutes Int?    @map("min_offset_minutes")
+  maxOffsetMinutes Int?    @map("max_offset_minutes")
+  geoRadiusMeters Int      @default(50) @map("geo_radius_meters")
+  gpsRequired     Boolean  @default(true) @map("gps_required")
+  photoRequired   Boolean  @default(false) @map("photo_required")
+  noteRequired    Boolean  @default(false) @map("note_required")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  route           PatrolRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  checkpoint      Checkpoint  @relation(fields: [checkpointId], references: [id])
+  guardPost       GuardPost?  @relation(fields: [guardPostId], references: [id])
+  logs            PatrolLog[]
+
+  @@unique([tenantId, routeId, sequence])
+  @@unique([tenantId, routeId, checkpointId])
+  @@index([tenantId, checkpointId])
+  @@index([tenantId, guardPostId])
+  @@map("patrol_route_checkpoints")
+}
+
+model PatrolAssignment {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  routeId         String   @map("route_id")
+  staffId         String   @map("staff_id")
+  shiftScheduleId String?  @map("shift_schedule_id")
+  contractId      String?  @map("contract_id")
+  vendorId        String?  @map("vendor_id")
+  assignmentDate  String?  @map("assignment_date")
+  startAt         DateTime? @map("start_at")
+  endAt           DateTime? @map("end_at")
+  status          String   @default("PLANNED") @map("status")
+  assignedBy      String?  @map("assigned_by")
+  metadata        Json?    @map("metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  route           PatrolRoute @relation(fields: [routeId], references: [id])
+  staff           Staff @relation(fields: [staffId], references: [id])
+  shiftSchedule   ShiftSchedule? @relation(fields: [shiftScheduleId], references: [id])
+  shiftSessions   ShiftSession[]
+  patrolSessions  PatrolSession[]
+
+  @@index([tenantId, staffId, status])
+  @@index([tenantId, shiftScheduleId])
+  @@index([tenantId, contractId])
+  @@index([tenantId, vendorId])
+  @@index([tenantId, assignmentDate])
+  @@map("patrol_assignments")
+}
+
+model ShiftSession {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  staffId         String   @map("staff_id")
+  shiftScheduleId String?  @map("shift_schedule_id")
+  patrolAssignmentId String? @map("patrol_assignment_id")
+  status          String   @default("PENDING_REVIEW") @map("status")
+  openedAt        DateTime @default(now()) @map("opened_at")
+  closedAt        DateTime? @map("closed_at")
+  checkInAttendanceId String? @map("check_in_attendance_id")
+  checkOutAttendanceId String? @map("check_out_attendance_id")
+  exceptionCodes  String[] @default([]) @map("exception_codes")
+  metadata        Json?    @map("metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  staff           Staff @relation(fields: [staffId], references: [id])
+  shiftSchedule   ShiftSchedule? @relation(fields: [shiftScheduleId], references: [id])
+  patrolAssignment PatrolAssignment? @relation(fields: [patrolAssignmentId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  patrolSessions  PatrolSession[]
+
+  @@index([tenantId, staffId, status])
+  @@index([tenantId, shiftScheduleId])
+  @@index([tenantId, patrolAssignmentId])
+  @@map("shift_sessions")
+}
+
+model PatrolSession {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  routeId         String   @map("route_id")
+  staffId         String   @map("staff_id")
+  vendorId        String?  @map("vendor_id")
+  contractId      String?  @map("contract_id")
+  siteId          String?  @map("site_id")
+  shiftSessionId  String?  @map("shift_session_id")
+  patrolAssignmentId String? @map("patrol_assignment_id")
+  status          String   @default("IN_PROGRESS") @map("status")
+  startedAt       DateTime @default(now()) @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  expectedCheckpointCount Int @default(0) @map("expected_checkpoint_count")
+  scannedCheckpointCount Int @default(0) @map("scanned_checkpoint_count")
+  completionPercent Float @default(0) @map("completion_percent")
+  missedCheckpointCount Int @default(0) @map("missed_checkpoint_count")
+  lateCheckpointCount Int @default(0) @map("late_checkpoint_count")
+  outOfOrderCount Int @default(0) @map("out_of_order_count")
+  gpsViolationCount Int @default(0) @map("gps_violation_count")
+  evidenceMissingCount Int @default(0) @map("evidence_missing_count")
+  complianceScore Float? @map("compliance_score")
+  exceptionSummary Json? @map("exception_summary")
+  metadata        Json?  @map("metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  route           PatrolRoute @relation(fields: [routeId], references: [id])
+  staff           Staff @relation(fields: [staffId], references: [id])
+  shiftSession    ShiftSession? @relation(fields: [shiftSessionId], references: [id])
+  patrolAssignment PatrolAssignment? @relation(fields: [patrolAssignmentId], references: [id])
+  logs            PatrolLog[]
+
+  @@index([tenantId, staffId, status])
+  @@index([tenantId, routeId])
+  @@index([tenantId, vendorId])
+  @@index([tenantId, contractId])
+  @@index([tenantId, siteId])
+  @@index([tenantId, shiftSessionId])
+  @@index([tenantId, patrolAssignmentId])
+  @@index([tenantId, complianceScore])
+  @@map("patrol_sessions")
+}
+
+model ViolationEvent {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  vendorId        String?  @map("vendor_id")
+  contractId      String?  @map("contract_id")
+  siteId          String?  @map("site_id")
+  guardPostId     String?  @map("guard_post_id")
+  staffId         String?  @map("staff_id")
+  patrolSessionId String?  @map("patrol_session_id")
+  sourceType      String   @map("source_type")
+  violationType   String   @map("violation_type")
+  severity        String   @default("MEDIUM") @map("severity")
+  status          String   @default("PENDING_REVIEW") @map("status")
+  occurredAt      DateTime @default(now()) @map("occurred_at")
+  idempotencyKey  String   @map("idempotency_key")
+  evidence        Json?    @map("evidence")
+  penaltyAmount   Decimal  @default(0) @map("penalty_amount")
+  metadata        Json?    @map("metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, vendorId, occurredAt(sort: Desc)])
+  @@index([tenantId, contractId, occurredAt(sort: Desc)])
+  @@index([tenantId, patrolSessionId])
+  @@map("violation_events")
 }
 
 model Incident {
   id          String   @id @default(uuid()) @map("id")
   tenantId    String   @map("tenant_id")
   staffId     String   @map("staff_id") // ID of the person who reported
+  vendorId    String?  @map("vendor_id")
+  contractId  String?  @map("contract_id")
+  siteId      String?  @map("site_id")
   type        String   @map("type")
   severity    IncidentSeverity @default(LOW) @map("severity")
   severityWeight Int @default(1) @map("severity_weight")
@@ -268,6 +495,20 @@ model Incident {
   assignedToId String? @map("assigned_to_id")
   resolutionNotes String? @map("resolution_notes")
   resolutionImages String[] @default([]) @map("resolution_images")
+  slaDeadline DateTime? @map("sla_deadline")
+  slaBreached Boolean @default(false) @map("sla_breached")
+  slaMinutes Int? @map("sla_minutes")
+  responseDueAt DateTime? @map("response_due_at")
+  resolutionDueAt DateTime? @map("resolution_due_at")
+  responseAcknowledgedAt DateTime? @map("response_acknowledged_at")
+  resolutionSubmittedAt DateTime? @map("resolution_submitted_at")
+  requiredEvidenceTypes String[] @default([]) @map("required_evidence_types")
+  escalatedAt DateTime? @map("escalated_at")
+  resolvedById String? @map("resolved_by_id")
+  approvedById String? @map("approved_by_id")
+  closedById String? @map("closed_by_id")
+  reopenedAt DateTime? @map("reopened_at")
+  reopenReason String? @map("reopen_reason")
   
   reportedAt  DateTime @default(now()) @map("reported_at")
   investigatingAt DateTime? @map("investigating_at")
@@ -279,13 +520,107 @@ model Incident {
 
   reporter    Staff    @relation("IncidentReporter", fields: [staffId], references: [id])
   assignee    Staff?   @relation("IncidentAssignee", fields: [assignedToId], references: [id])
+  resolver    Staff?   @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  approver    Staff?   @relation("IncidentApprover", fields: [approvedById], references: [id])
+  closer      Staff?   @relation("IncidentCloser", fields: [closedById], references: [id])
+  vendor      Vendor?   @relation("IncidentVendor", fields: [vendorId], references: [id])
+  contract    Contract? @relation("IncidentContract", fields: [contractId], references: [id])
+  site        Site?     @relation("IncidentSite", fields: [siteId], references: [id])
+  timeline    IncidentTimeline[]
+  evidences   IncidentEvidence[]
 
   @@index([tenantId, status])
+  @@index([tenantId, status, slaDeadline])
+  @@index([tenantId, status, responseDueAt])
+  @@index([tenantId, status, resolutionDueAt])
+  @@index([tenantId, vendorId, reportedAt(sort: Desc)])
+  @@index([tenantId, contractId, reportedAt(sort: Desc)])
+  @@index([tenantId, siteId, reportedAt(sort: Desc)])
+  @@index([tenantId, slaBreached])
   @@index([staffId, createdAt(sort: Desc)])
   @@index([tenantId, staffId, type, createdAt(sort: Desc)])
   @@index([tenantId, severityWeight, reportedAt(sort: Desc)])
   @@index([tenantId, reportedAt(sort: Desc)])
   @@map("incidents")
+}
+
+model IncidentTimeline {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  incidentId  String   @map("incident_id")
+  actorId     String?  @map("actor_id")
+  actorRole   String?  @map("actor_role")
+  action      IncidentTimelineAction @map("action")
+  fromStatus  IncidentStatus? @map("from_status")
+  toStatus    IncidentStatus? @map("to_status")
+  notes       String?  @map("notes")
+  evidenceIds String[] @default([]) @map("evidence_ids")
+  traceId     String?  @map("trace_id")
+  metadata    Json?    @map("metadata")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  incident    Incident @relation(fields: [incidentId], references: [id])
+
+  @@index([tenantId, incidentId, createdAt(sort: Asc)])
+  @@index([tenantId, action, createdAt(sort: Desc)])
+  @@map("incident_timelines")
+}
+
+model IncidentEvidence {
+  id          String   @id @default(uuid()) @map("id")
+  tenantId    String   @map("tenant_id")
+  incidentId  String   @map("incident_id")
+  timelineId  String?  @map("timeline_id")
+  actorId     String?  @map("actor_id")
+  sourceType  String   @default("INCIDENT") @map("source_type")
+  sourceId    String?  @map("source_id")
+  uploadedBy  String?  @map("uploaded_by")
+  kind        IncidentEvidenceKind @default(NOTE) @map("kind")
+  uri         String?  @map("uri")
+  fileType    String?  @map("file_type")
+  fileUrl     String?  @map("file_url")
+  thumbnailUrl String? @map("thumbnail_url")
+  capturedAt  DateTime? @map("captured_at")
+  gpsLat       Float?  @map("gps_lat")
+  gpsLng       Float?  @map("gps_lng")
+  checksum     String? @map("checksum")
+  note        String?  @map("note")
+  status      String   @default("ACTIVE") @map("status")
+  lockedByReportId String? @map("locked_by_report_id")
+  lockedAt    DateTime? @map("locked_at")
+  isReportLocked Boolean @default(false) @map("is_report_locked")
+  metadata    Json?    @map("metadata")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  incident    Incident @relation(fields: [incidentId], references: [id])
+
+  @@index([tenantId, incidentId, createdAt(sort: Asc)])
+  @@index([tenantId, kind, createdAt(sort: Desc)])
+  @@index([tenantId, sourceType, sourceId])
+  @@index([tenantId, status])
+  @@index([tenantId, isReportLocked])
+  @@map("incident_evidences")
+}
+
+model IncidentSlaRule {
+  id                    String   @id @default(uuid()) @map("id")
+  tenantId              String   @map("tenant_id")
+  contractId            String?  @map("contract_id")
+  siteId                String?  @map("site_id")
+  severity              IncidentSeverity @map("severity")
+  incidentType          String   @map("incident_type")
+  responseDueMinutes    Int      @map("response_due_minutes")
+  resolutionDueMinutes  Int      @map("resolution_due_minutes")
+  escalationAfterMinutes Int?    @map("escalation_after_minutes")
+  penaltyPolicy         Json?    @map("penalty_policy")
+  requiredEvidenceTypes String[] @default([]) @map("required_evidence_types")
+  status                String   @default("ACTIVE") @map("status")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, contractId, siteId, severity, incidentType, status])
+  @@index([tenantId, status])
+  @@map("incident_sla_rules")
 }
 
 enum IncidentSeverity {
@@ -297,11 +632,41 @@ enum IncidentSeverity {
 
 enum IncidentStatus {
   REPORTED
+  ACKNOWLEDGED
+  ASSIGNED
   INVESTIGATING
+  WAITING_VENDOR_RESPONSE
   ESCALATED
   RESOLVED
+  RESOLVED_PENDING_APPROVAL
+  REOPENED
   CLOSED
   CANCELLED
+}
+
+enum IncidentTimelineAction {
+  REPORTED
+  SLA_ASSIGNED
+  ACKNOWLEDGED
+  ASSIGNED
+  COMMENTED
+  EVIDENCE_ADDED
+  SLA_BREACHED
+  STATUS_CHANGED
+  RESOLUTION_SUBMITTED
+  RESOLUTION_APPROVED
+  RESOLUTION_REJECTED
+  ESCALATED
+  CLOSED
+  REOPENED
+  CANCELLED
+}
+
+enum IncidentEvidenceKind {
+  PHOTO
+  VIDEO
+  NOTE
+  DOCUMENT
 }
 
 
@@ -350,6 +715,36 @@ model News {
   seoDescription  String?  @map("seo_description")
 
   @@map("news")
+}
+
+
+model ContactLead {
+  id              String   @id @default(uuid()) @map("id")
+  trackingCode    String   @unique @map("tracking_code")
+  fullName        String   @map("full_name")
+  email           String   @map("email")
+  emailHash       String   @map("email_hash")
+  contentHash     String   @map("content_hash")
+  company         String?  @map("company")
+  phone           String?  @map("phone")
+  subject         String   @map("subject")
+  message         String   @map("message")
+  intent          String   @default("OTHER") @map("intent")
+  source          String   @default("PUBLIC_CONTACT_PAGE") @map("source")
+  status          String   @default("NEW") @map("status")
+  ownerUserId     String?  @map("owner_user_id")
+  ipHash          String?  @map("ip_hash")
+  userAgent       String?  @map("user_agent")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  lastContactedAt DateTime? @map("last_contacted_at") @db.Timestamptz(3)
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([emailHash, createdAt])
+  @@index([contentHash, createdAt])
+  @@index([intent, createdAt])
+  @@map("contact_leads")
 }
 
 model Feedback {
@@ -423,30 +818,30 @@ model TenantSubscription {
 
 model BillingPayment {
   id              String        @id @default(cuid())
-  tenantId        String
+  tenantId        String        @map("tenant_id")
   subscription    TenantSubscription @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
 
-  paidUsers       Int
-  paidMonths      Int
-  amountVnd       BigInt        // LUÔN tự tính server-side: paidUsers * paidMonths * 99000
+  paidUsers       Int           @map("paid_users")
+  paidMonths      Int           @map("paid_months")
+  amountVnd       BigInt        @map("amount_vnd")
 
   status          PaymentStatus @default(PENDING)
-  paymentRef      String?
-  paidAt          DateTime?
-  activatedAt     DateTime?
-  activatedBy     String?       // staffId Super Admin
+  paymentRef      String?       @map("payment_ref")
+  paidAt          DateTime?     @map("paid_at")
+  activatedAt     DateTime?     @map("activated_at")
+  activatedBy     String?       @map("activated_by")
   note            String?
 
-  periodStart     DateTime?
-  periodEnd       DateTime?
+  periodStart     DateTime?     @map("period_start")
+  periodEnd       DateTime?     @map("period_end")
 
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt      @map("updated_at")
 
-  @@unique([tenantId, paymentRef])   // chống duplicate payment cùng mã CK
+  @@unique([tenantId, paymentRef])
   @@index([tenantId])
   @@index([status])
-  @@index([periodEnd])               // scheduler check expiry
+  @@index([periodEnd])
   @@map("billing_payments")
 }
 
@@ -523,43 +918,335 @@ model Vendor {
   id              String   @id @default(uuid()) @map("id")
   tenantId        String   @map("tenant_id")
   name            String   @map("name")
+  taxCode         String?  @map("tax_code")
   address         String?  @map("address")
   managerName     String?  @map("manager_name")
   contactPerson   String   @map("contact_person")
   email           String   @map("email")
   phone           String   @map("phone")
+  serviceScope    String?  @map("service_scope")
+  riskLevel       String   @default("LOW") @map("risk_level")
+  notes           String?  @map("notes")
   score           Float    @default(100.0) @map("score")
-  status          String   @default("active") @map("status")
+  status          String   @default("ACTIVE") @map("status")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   contracts       Contract[]
+  sites           Site[]
+  incidents       Incident[] @relation("IncidentVendor")
 
   @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, riskLevel])
   @@map("vendors")
+}
+
+model Site {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  siteName        String   @map("site_name")
+  address         String   @map("address")
+  siteType        String   @default("OTHER") @map("site_type")
+  geoFence        Json?    @map("geo_fence")
+  status          String   @default("ACTIVE") @map("status")
+  managerName     String?  @map("manager_name")
+  managerPhone    String?  @map("manager_phone")
+  vendorId        String?  @map("vendor_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  vendor                    Vendor?                    @relation(fields: [vendorId], references: [id])
+  contracts                 Contract[]
+  guardPosts                GuardPost[]
+  contractLineItems         ContractLineItem[]
+  contractShiftRequirements ContractShiftRequirement[]
+  contractStaffStandards    ContractStaffStandard[]
+  contractChecklistRequirements ContractChecklistRequirement[]
+  checkpoints               Checkpoint[]
+  incidents                 Incident[] @relation("IncidentSite")
+
+  @@index([tenantId, status])
+  @@index([tenantId, vendorId])
+  @@map("sites")
+}
+
+model GuardPost {
+  id                 String   @id @default(uuid()) @map("id")
+  tenantId           String   @map("tenant_id")
+  siteId             String   @map("site_id")
+  postName           String   @map("post_name")
+  postType           String   @default("OTHER") @map("post_type")
+  requiredGuardCount Int      @default(1) @map("required_guard_count")
+  requiredSkill      String?  @map("required_skill")
+  gpsLat             Float?   @map("gps_lat")
+  gpsLng             Float?   @map("gps_lng")
+  radiusMeters       Int      @default(50) @map("radius_meters")
+  status             String   @default("ACTIVE") @map("status")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  site                      Site                       @relation(fields: [siteId], references: [id])
+  shiftSchedules            ShiftSchedule[]
+  routeCheckpoints          PatrolRouteCheckpoint[]
+  contractLineItems         ContractLineItem[]
+  contractShiftRequirements ContractShiftRequirement[]
+  contractStaffStandards    ContractStaffStandard[]
+  contractChecklistRequirements ContractChecklistRequirement[]
+  checkpoints               Checkpoint[]
+
+  @@index([tenantId, siteId, status])
+  @@map("guard_posts")
 }
 
 model Contract {
   id                    String   @id @default(uuid()) @map("id")
   tenantId              String   @map("tenant_id")
   vendorId              String   @map("vendor_id")
+  siteId                String?  @map("site_id")
+  contractName          String?  @map("contract_name")
+  contractCode          String?  @map("contract_code")
   siteName              String   @map("site_name")
   startDate             DateTime @map("start_date")
   endDate               DateTime @map("end_date")
   value                 Decimal  @map("value")
   currency              String   @default("VND") @map("currency")
   guardCountPerShift    Int      @map("guard_count_per_shift")
-  status                String   @default("active") @map("status")
+  status                String   @default("DRAFT") @map("status")
   slaConfig             Json     @map("sla_config")
+  acceptancePolicy      Json?    @map("acceptance_policy")
+  evidencePolicy        Json?    @map("evidence_policy")
+  penaltyPolicy         Json?    @map("penalty_policy")
+  contractFileUrl       String?  @map("contract_file_url")
+  activatedAt           DateTime? @map("activated_at")
+  activeVersionId       String?  @unique @map("active_version_id")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
   vendor                Vendor   @relation(fields: [vendorId], references: [id])
-  complianceScores     ComplianceScore[]
+  site                  Site?    @relation(fields: [siteId], references: [id])
+  activeVersion         ContractVersion? @relation("ActiveContractVersion", fields: [activeVersionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  versions              ContractVersion[] @relation("ContractVersions")
+  complianceScores      ComplianceScore[]
+  penaltyRules          ContractPenaltyRule[]
+  shiftRequirements     ContractShiftRequirement[]
+  staffStandards        ContractStaffStandard[]
+  checklistRequirements ContractChecklistRequirement[]
+  incidents             Incident[] @relation("IncidentContract")
 
   @@index([tenantId])
   @@index([vendorId])
+  @@index([tenantId, activeVersionId])
+  @@index([tenantId, siteId, status])
+  @@index([tenantId, vendorId, siteId, status])
   @@map("contracts")
+}
+
+model ContractVersion {
+  id                    String   @id @default(uuid()) @map("id")
+  tenantId              String   @map("tenant_id")
+  contractId            String   @map("contract_id")
+  versionNumber         Int      @map("version_number")
+  status                String   @default("DRAFT") @map("status")
+  versionLabel          String?  @map("version_label")
+  changeSummary         String?  @map("change_summary")
+  effectiveFrom         DateTime @map("effective_from")
+  effectiveTo           DateTime? @map("effective_to")
+  currency              String   @default("VND") @map("currency")
+  totalContractValue    Decimal? @map("total_contract_value")
+  guardCountPerShift    Int?     @map("guard_count_per_shift")
+  acceptancePolicy      Json?    @map("acceptance_policy")
+  evidencePolicy        Json?    @map("evidence_policy")
+  penaltyPolicy         Json?    @map("penalty_policy")
+  slaConfig             Json?    @map("sla_config")
+  metadata              Json?    @map("metadata")
+  activatedAt           DateTime? @map("activated_at")
+  archivedAt            DateTime? @map("archived_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  contract              Contract  @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Cascade)
+  activeForContract        Contract?                  @relation("ActiveContractVersion")
+  lineItems                ContractLineItem[]
+  penaltyRules             ContractPenaltyRule[]
+  shiftRequirements        ContractShiftRequirement[]
+  staffStandards           ContractStaffStandard[]
+  checklistRequirements    ContractChecklistRequirement[]
+  monthlyAcceptanceReports MonthlyAcceptanceReport[]
+
+  @@unique([tenantId, contractId, versionNumber])
+  @@index([tenantId, contractId, status])
+  @@index([tenantId, contractId, effectiveFrom])
+  @@index([tenantId, effectiveFrom, effectiveTo])
+  @@map("contract_versions")
+}
+
+model ContractLineItem {
+  id                 String   @id @default(uuid()) @map("id")
+  tenantId           String   @map("tenant_id")
+  contractVersionId  String   @map("contract_version_id")
+  contractId         String   @map("contract_id")
+  siteId             String   @map("site_id")
+  guardPostId        String?  @map("guard_post_id")
+  shiftType          String?  @map("shift_type")
+  shiftName          String?  @map("shift_name")
+  startTime          String?  @map("start_time")
+  endTime            String?  @map("end_time")
+  positionName       String?  @map("position_name")
+  requiredStaffCount Int      @default(1) @map("required_staff_count")
+  unitPrice          Decimal  @map("unit_price")
+  billingCycle       String   @default("MONTHLY") @map("billing_cycle")
+  totalAmount        Decimal  @map("total_amount")
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  metadata           Json?    @map("metadata")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  contractVersion    ContractVersion @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  site               Site            @relation(fields: [siteId], references: [id])
+  guardPost          GuardPost?      @relation(fields: [guardPostId], references: [id])
+  checklistRequirements ContractChecklistRequirement[]
+  @@index([tenantId, contractVersionId, isActive])
+  @@index([tenantId, contractId, siteId])
+  @@index([tenantId, guardPostId])
+  @@index([tenantId, shiftType])
+  @@map("contract_line_items")
+}
+
+model ContractShiftRequirement {
+  id                 String   @id @default(uuid()) @map("id")
+  tenantId           String   @map("tenant_id")
+  contractId         String   @map("contract_id")
+  contractVersionId  String   @map("contract_version_id")
+  siteId             String   @map("site_id")
+  guardPostId        String?  @map("guard_post_id")
+  shiftType          String?  @map("shift_type")
+  shiftName          String?  @map("shift_name")
+  startTime          String   @map("start_time")
+  endTime            String   @map("end_time")
+  requiredStaffCount Int      @default(1) @map("required_staff_count")
+  appliesOnMonday    Boolean  @default(true) @map("applies_on_monday")
+  appliesOnTuesday   Boolean  @default(true) @map("applies_on_tuesday")
+  appliesOnWednesday Boolean  @default(true) @map("applies_on_wednesday")
+  appliesOnThursday  Boolean  @default(true) @map("applies_on_thursday")
+  appliesOnFriday    Boolean  @default(true) @map("applies_on_friday")
+  appliesOnSaturday  Boolean  @default(true) @map("applies_on_saturday")
+  appliesOnSunday    Boolean  @default(true) @map("applies_on_sunday")
+  positionName       String?  @map("position_name")
+  patrolRequired     Boolean  @default(false) @map("patrol_required")
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  metadata           Json?    @map("metadata")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  contract          Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractVersion   ContractVersion  @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  site              Site             @relation(fields: [siteId], references: [id])
+  guardPost         GuardPost?       @relation(fields: [guardPostId], references: [id])
+
+  @@index([tenantId, contractVersionId, isActive])
+  @@index([tenantId, contractId, siteId, isActive])
+  @@index([tenantId, guardPostId, isActive])
+  @@index([tenantId, siteId, shiftType])
+  @@map("contract_shift_requirements")
+}
+
+model ContractStaffStandard {
+  id                     String   @id @default(uuid()) @map("id")
+  tenantId               String   @map("tenant_id")
+  contractId             String   @map("contract_id")
+  contractVersionId      String   @map("contract_version_id")
+  siteId                 String   @map("site_id")
+  appliesToGuardPostId   String?  @map("applies_to_guard_post_id")
+  standardCode           String   @map("standard_code")
+  standardName           String?  @map("standard_name")
+  requiredQualifications Json?    @map("required_qualifications")
+  blockingLevel          String   @default("WARN") @map("blocking_level")
+  isActive               Boolean  @default(true) @map("is_active")
+  sortOrder              Int      @default(0) @map("sort_order")
+  metadata               Json?    @map("metadata")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  contract            Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractVersion     ContractVersion  @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  site                Site             @relation(fields: [siteId], references: [id])
+  appliesToGuardPost  GuardPost?       @relation(fields: [appliesToGuardPostId], references: [id])
+
+  @@unique([tenantId, contractVersionId, standardCode, appliesToGuardPostId])
+  @@index([tenantId, contractId, siteId, isActive])
+  @@index([tenantId, appliesToGuardPostId, isActive])
+  @@index([tenantId, standardCode, blockingLevel])
+  @@map("contract_staff_standards")
+}
+
+model ContractChecklistRequirement {
+  id                     String   @id @default(uuid()) @map("id")
+  tenantId               String   @map("tenant_id")
+  contractId             String   @map("contract_id")
+  contractVersionId      String   @map("contract_version_id")
+  siteId                 String   @map("site_id")
+  guardPostId            String?  @map("guard_post_id")
+  lineItemId             String?  @map("line_item_id")
+  requirementCode        String   @map("requirement_code")
+  requirementName        String   @map("requirement_name")
+  description            String?  @map("description")
+  checkpointCode         String?  @map("checkpoint_code")
+  requiredEvidenceTypes  String[] @default([]) @map("required_evidence_types")
+  isMandatory            Boolean  @default(true) @map("is_mandatory")
+  sortOrder              Int      @default(0) @map("sort_order")
+  isActive               Boolean  @default(true) @map("is_active")
+  metadata               Json?    @map("metadata")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  contract               Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractVersion        ContractVersion  @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  site                   Site             @relation(fields: [siteId], references: [id])
+  guardPost              GuardPost?       @relation(fields: [guardPostId], references: [id])
+  lineItem               ContractLineItem? @relation(fields: [lineItemId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, contractVersionId, requirementCode, guardPostId])
+  @@index([tenantId, contractId, siteId, isActive])
+  @@index([tenantId, contractVersionId, isActive])
+  @@index([tenantId, guardPostId, isActive])
+  @@index([tenantId, lineItemId])
+  @@map("contract_checklist_requirements")
+}
+
+model ContractPenaltyRule {
+  id                String   @id @default(uuid()) @map("id")
+  tenantId          String   @map("tenant_id")
+  contractId        String   @map("contract_id")
+  contractVersionId String?  @map("contract_version_id")
+  clauseCode        String?  @map("clause_code")
+  ruleName          String   @map("rule_name")
+  violationCode     String   @map("violation_code")
+  penaltyUnit       String   @map("penalty_unit")
+  amount            Decimal? @map("amount")
+  percentValue      Decimal? @map("percent_value")
+  graceCount        Int      @default(0) @map("grace_count")
+  maxMonthlyPenalty Decimal? @map("max_monthly_penalty")
+  repeatEscalation  Json?    @map("repeat_escalation")
+  evidenceRequired  Boolean  @default(false) @map("evidence_required")
+  isActive          Boolean  @default(true) @map("is_active")
+  extractedFromAI   Boolean  @default(false) @map("extracted_from_ai")
+  sortOrder         Int      @default(0) @map("sort_order")
+  metadata          Json?    @map("metadata")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  contract          Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractVersion   ContractVersion? @relation(fields: [contractVersionId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, contractId, contractVersionId, violationCode, clauseCode])
+  @@index([tenantId, contractId, isActive])
+  @@index([tenantId, contractVersionId, isActive])
+  @@index([tenantId, violationCode, isActive])
+  @@index([tenantId, contractId, penaltyUnit])
+  @@map("contract_penalty_rules")
 }
 
 model ComplianceScore {
@@ -586,6 +1273,7 @@ model ShiftSchedule {
   id              String   @id @default(uuid()) @map("id")
   tenantId        String   @map("tenant_id")
   contractId      String   @map("contract_id")
+  guardPostId     String?  @map("guard_post_id")
   date            String   @map("date") // YYYY-MM-DD
   shiftType       String   @map("shift_type") // MORNING, AFTERNOON, NIGHT
   startTime       String   @map("start_time") // HH:mm
@@ -598,12 +1286,46 @@ model ShiftSchedule {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   attendanceRecords AttendanceRecord[]
+  assignments       ShiftAssignment[]
   complianceItems   ShiftComplianceItem[]
+  patrolAssignments PatrolAssignment[]
+  shiftSessions ShiftSession[]
+  guardPost      GuardPost? @relation(fields: [guardPostId], references: [id])
 
   @@index([tenantId, date])
   @@index([contractId])
+  @@index([tenantId, guardPostId])
   @@index([date, shiftType])
+  @@unique([tenantId, contractId, siteId, guardPostId, date, shiftType, startTime, endTime, positionName])
   @@map("shift_schedules")
+}
+
+model ShiftAssignment {
+  id              String   @id @default(uuid()) @map("id")
+  tenantId        String   @map("tenant_id")
+  shiftScheduleId String   @map("shift_schedule_id")
+  staffId         String   @map("staff_id")
+  vendorId        String?  @map("vendor_id")
+  contractId      String?  @map("contract_id")
+  siteId          String?  @map("site_id")
+  status          String   @default("ASSIGNED") @map("status")
+  assignedBy      String?  @map("assigned_by")
+  assignedAt      DateTime @default(now()) @map("assigned_at")
+  notes           String?  @map("notes")
+  metadata        Json?    @map("metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  shiftSchedule   ShiftSchedule @relation(fields: [shiftScheduleId], references: [id], onDelete: Cascade)
+  staff           Staff         @relation(fields: [staffId], references: [id])
+
+  @@unique([tenantId, shiftScheduleId, staffId])
+  @@index([tenantId, shiftScheduleId])
+  @@index([tenantId, staffId, status])
+  @@index([tenantId, vendorId, assignedAt(sort: Desc)])
+  @@index([tenantId, contractId, assignedAt(sort: Desc)])
+  @@index([tenantId, siteId, assignedAt(sort: Desc)])
+  @@map("shift_assignments")
 }
 
 model ShiftComplianceItem {
@@ -649,6 +1371,155 @@ model MonthlyStrategyInsight {
   @@index([tenantId, month])
   @@index([tenantId])
   @@map("monthly_strategy_insights")
+}
+
+model VendorScorecard {
+  id                       String   @id @default(uuid()) @map("id")
+  tenantId                 String   @map("tenant_id")
+  vendorId                 String   @map("vendor_id")
+  contractId               String?  @map("contract_id")
+  siteId                   String?  @map("site_id")
+  month                    String   @map("month")
+  status                   String   @default("DRAFT") @map("status")
+  patrolRate               Float    @default(0) @map("patrol_rate")
+  incidentRate             Float    @default(0) @map("incident_rate")
+  disciplineRate           Float    @default(0) @map("discipline_rate")
+  shiftCoverageRate        Float    @default(0) @map("shift_coverage_rate")
+  patrolComplianceRate     Float    @default(0) @map("patrol_compliance_rate")
+  incidentSlaRate          Float    @default(0) @map("incident_sla_rate")
+  evidenceCompletenessRate Float    @default(0) @map("evidence_completeness_rate")
+  manualAuditRate          Float    @default(0) @map("manual_audit_rate")
+  totalScore               Float    @default(0) @map("total_score")
+  formulaVersion           String   @default("monthly-acceptance-scorecard-v2.5-groups") @map("formula_version")
+  scoreBreakdown           Json?    @map("score_breakdown")
+  confirmedViolationsCount Int      @default(0) @map("confirmed_violations_count")
+  pendingViolationsCount   Int      @default(0) @map("pending_violations_count")
+  violationsCount          Int      @default(0) @map("violations_count")
+  totalPenaltySuggested    Decimal  @default(0) @map("total_penalty_suggested")
+  metrics                  Json?    @map("metrics")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, vendorId, contractId, siteId, month])
+  @@index([tenantId, month])
+  @@index([tenantId, vendorId, month])
+  @@map("vendor_scorecards")
+}
+
+model MonthlyAcceptanceReport {
+  id                        String   @id @default(uuid()) @map("id")
+  tenantId                  String   @map("tenant_id")
+  vendorId                  String   @map("vendor_id")
+  contractId                String?  @map("contract_id")
+  contractVersionId         String?  @map("contract_version_id")
+  siteId                    String?  @map("site_id")
+  month                     String   @map("month")
+  status                    String   @default("DRAFT") @map("status")
+  scorecardId               String?  @map("scorecard_id")
+  revisionNumber            Int      @default(1) @map("revision_number")
+  revisionRootId            String?  @map("revision_root_id")
+  previousRevisionId        String?  @unique @map("previous_revision_id")
+  supersededByReportId      String?  @unique @map("superseded_by_report_id")
+  supersededAt              DateTime? @map("superseded_at")
+  supersededBy              String?  @map("superseded_by")
+  generatedAt               DateTime @default(now()) @map("generated_at")
+  generatedBy               String?  @map("generated_by")
+  finalizedAt               DateTime? @map("finalized_at")
+  finalizedBy               String?  @map("finalized_by")
+  totalPenaltyAmount        Decimal  @default(0) @map("total_penalty_amount")
+  totalConfirmedViolations  Int      @default(0) @map("total_confirmed_violations")
+  totalPendingViolations    Int      @default(0) @map("total_pending_violations")
+  summary                   Json?    @map("summary")
+  contractSnapshot          Json?    @map("contract_snapshot")
+  vendorSnapshot            Json     @map("vendor_snapshot")
+  siteSnapshot              Json?    @map("site_snapshot")
+  slaPolicySnapshot         Json?    @map("sla_policy_snapshot")
+  penaltyPolicySnapshot     Json?    @map("penalty_policy_snapshot")
+  scoreFormulaVersion       String   @default("monthly-acceptance-v1") @map("score_formula_version")
+  violationSnapshots        Json     @map("violation_snapshots")
+  evidenceSnapshots         Json     @map("evidence_snapshots")
+  penaltyCalculationDetails Json     @map("penalty_calculation_details")
+  generatedDataHash         String   @map("generated_data_hash")
+  exportPdfJobId            String?  @map("export_pdf_job_id")
+  exportExcelJobId          String?  @map("export_excel_job_id")
+  exportPdfAttachmentId     String?  @map("export_pdf_attachment_id")
+  exportExcelAttachmentId   String?  @map("export_excel_attachment_id")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  contractVersion    ContractVersion?         @relation(fields: [contractVersionId], references: [id], onDelete: SetNull)
+  previousRevision   MonthlyAcceptanceReport?  @relation("MonthlyAcceptanceReportRevisionChain", fields: [previousRevisionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  nextRevision       MonthlyAcceptanceReport?  @relation("MonthlyAcceptanceReportRevisionChain")
+  supersededByReport MonthlyAcceptanceReport?  @relation("MonthlyAcceptanceReportSupersede", fields: [supersededByReportId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  supersedesReports  MonthlyAcceptanceReport[] @relation("MonthlyAcceptanceReportSupersede")
+  penaltyItems       PenaltyItem[]
+  disputes           ViolationDispute[]
+
+  @@unique([tenantId, vendorId, contractId, siteId, month, revisionNumber])
+  @@index([tenantId, month])
+  @@index([tenantId, vendorId, month])
+  @@index([tenantId, contractVersionId])
+  @@index([tenantId, revisionRootId])
+  @@map("monthly_acceptance_reports")
+}
+
+model PenaltyItem {
+  id                    String   @id @default(uuid()) @map("id")
+  tenantId              String   @map("tenant_id")
+  reportId              String   @map("report_id")
+  violationEventId      String?  @map("violation_event_id")
+  penaltyRuleId         String?  @map("penalty_rule_id")
+  vendorId              String?  @map("vendor_id")
+  contractId            String?  @map("contract_id")
+  siteId                String?  @map("site_id")
+  type                  String   @map("type")
+  status                String   @default("SUGGESTED") @map("status")
+  baseAmount            Decimal  @default(0) @map("base_amount")
+  unit                  String   @default("PER_OCCURRENCE") @map("unit")
+  quantity              Decimal  @default(1) @map("quantity")
+  graceApplied          Boolean  @default(false) @map("grace_applied")
+  capApplied            Boolean  @default(false) @map("cap_applied")
+  finalAmount           Decimal  @default(0) @map("final_amount")
+  amount                Decimal  @default(0) @map("amount")
+  reason                String?  @map("reason")
+  calculationDetail     Json?    @map("calculation_detail")
+  contractVersionSnapshot Json?  @map("contract_version_snapshot")
+  metadata              Json?    @map("metadata")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  report                MonthlyAcceptanceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, reportId])
+  @@index([tenantId, violationEventId])
+  @@index([tenantId, penaltyRuleId])
+  @@map("penalty_items")
+}
+
+model ViolationDispute {
+  id                    String   @id @default(uuid()) @map("id")
+  tenantId              String   @map("tenant_id")
+  violationEventId      String   @map("violation_event_id")
+  reportId              String?  @map("report_id")
+  vendorId              String?  @map("vendor_id")
+  contractId            String?  @map("contract_id")
+  siteId                String?  @map("site_id")
+  submittedBy           String?  @map("submitted_by")
+  resolvedBy            String?  @map("resolved_by")
+  status                String   @default("OPEN") @map("status")
+  reason                String   @map("reason")
+  responseNote          String?  @map("response_note")
+  resolution            String?  @map("resolution")
+  metadata              Json?    @map("metadata")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  report                MonthlyAcceptanceReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, reportId])
+  @@index([tenantId, violationEventId])
+  @@index([tenantId, status, createdAt(sort: Desc)])
+  @@map("violation_disputes")
 }
 
 model Attachment {

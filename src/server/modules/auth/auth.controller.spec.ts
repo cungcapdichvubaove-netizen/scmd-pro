@@ -14,6 +14,9 @@ vi.mock('../../core/redis.js', () => ({
     del: vi.fn(),
     incr: vi.fn(),
     expire: vi.fn()
+  },
+  redisPubSub: {
+    publish: vi.fn()
   }
 }));
 
@@ -51,7 +54,8 @@ describe('AuthController', () => {
     };
     res = {
       status: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis()
+      json: vi.fn().mockReturnThis(),
+      cookie: vi.fn().mockReturnThis()
     };
     next = vi.fn();
   });
@@ -138,7 +142,9 @@ describe('AuthController', () => {
         password: hashedPassword,
         role: 'guard',
         tenantId: 'tenant-1',
-        fullName: 'Test User'
+        status: 'active',
+        fullName: 'Test User',
+        tokenVersion: 1
       } as any);
 
       // Mock zero attempts
@@ -146,10 +152,10 @@ describe('AuthController', () => {
 
       await AuthController.login(req as Request, res as Response, next);
 
+      expect(res.cookie).toHaveBeenCalledTimes(3);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        token: expect.any(String),
-        refreshToken: expect.any(String),
-        user: expect.objectContaining({ username: 'testuser' })
+        user: expect.objectContaining({ username: 'testuser' }),
+        csrfRequired: true
       }));
 
       // Verify Redis cleanup
@@ -173,7 +179,9 @@ describe('AuthController', () => {
         password: hashedPassword,
         role: 'super-admin',
         tenantId: 'system',
-        fullName: 'Super Admin'
+        status: 'active',
+        fullName: 'Super Admin',
+        tokenVersion: 1
       } as any);
 
       await AuthController.login(req as Request, res as Response, next);

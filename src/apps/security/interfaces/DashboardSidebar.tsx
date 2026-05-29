@@ -1,355 +1,238 @@
-import React from 'react';
-import { motion } from 'motion/react';
+﻿import React from 'react';
 import {
-  Shield,
-  LayoutDashboard,
-  ShieldAlert,
-  MapPin,
-  Users,
+  AlertTriangle,
   BarChart3,
-  AlertCircle,
-  ClipboardList,
-  BrainCircuit,
-  CreditCard,
+  Building2,
+  CalendarClock,
+  ClipboardCheck,
+  FileBarChart2,
+  FolderArchive,
   HelpCircle,
-  Settings,
-  ChevronRight,
   LogOut,
-  Zap,
-  FileSearch,
+  MapPinned,
+  Menu,
+  ReceiptText,
+  Route,
+  Settings,
+  ShieldCheck,
+  UserRoundCheck,
+  Users,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { useAuthStore } from '../../common/store/useAuthStore';
 import { ActiveTab } from './types';
-import { SCMDLogo } from '../../common/interfaces/components/SCMDLogo';
-import { SCMDTooltip } from '../../common/interfaces/components/SCMDTooltip';
 
-// ─── NavItem ─── //
-const NavItem: React.FC<{
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  badge?: string;
-  collapsed?: boolean;
-}> = ({ active, onClick, icon, label, badge, collapsed }) => {
-  const content = (
-    <motion.button
-      whileHover={{ x: active ? 4 : 2 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      className={cn(
-        'w-full flex items-center gap-3 px-4 py-3.5 rounded-scmd-md font-black text-[11px] uppercase tracking-widest transition-colors duration-300 relative',
-        active
-          ? 'bg-scmd-primary text-white shadow-lg shadow-scmd-primary/20'
-          : 'text-scmd-silver/60 hover:bg-white/5 hover:text-white',
-      )}
-    >
-      <span className={cn('transition-transform duration-300', active && 'scale-110')}>{icon}</span>
-      {!collapsed && <span className="flex-1 text-left">{label}</span>}
-      {badge && !collapsed && (
-        <span
-          className={cn(
-            'text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md',
-            active ? 'bg-scmd-navy text-scmd-cyber' : 'bg-scmd-cyber text-white',
-          )}
-        >
-          {badge}
-        </span>
-      )}
-    </motion.button>
-  );
-
-  if (collapsed) {
-    return (
-      <SCMDTooltip content={label} position="right">
-        {content}
-      </SCMDTooltip>
-    );
-  }
-
-  return content;
-};
-
-// ─── Props ─── //
-interface DashboardHeaderProps {
+interface DashboardSidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: (v: boolean) => void;
-  tenantInfo: any;
+  tenantInfo: { name: string; plan?: string; subscriptionPlan?: string; resolvedFeatures?: Record<string, boolean> } | null;
   loading: boolean;
   isPro: boolean;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export const DashboardSidebar: React.FC<DashboardHeaderProps> = ({
+type NavItem = {
+  tab: ActiveTab;
+  label: string;
+  icon: React.ReactNode;
+  visible?: boolean;
+};
+
+const roleLabelMap: Record<string, string> = {
+  'super-admin': 'Super Admin',
+  'tenant-admin': 'Quản trị dịch vụ',
+  supervisor: 'Giám sát',
+  guard: 'Bảo vệ',
+  technician: 'Kỹ thuật',
+  'vendor-commander': 'Chỉ huy nhà thầu',
+};
+
+function SidebarSection({
+  title,
+  items,
+  activeTab,
+  collapsed,
+  onSelect,
+}: {
+  title: string;
+  items: NavItem[];
+  activeTab: ActiveTab;
+  collapsed: boolean;
+  onSelect: (tab: ActiveTab) => void;
+}) {
+  const visibleItems = items.filter((item) => item.visible !== false);
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      {!collapsed && (
+        <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          {title}
+        </p>
+      )}
+      {visibleItems.map((item) => {
+        const active = activeTab === item.tab;
+        return (
+          <button
+            key={item.tab}
+            type="button"
+            onClick={() => onSelect(item.tab)}
+            aria-current={active ? 'page' : undefined}
+            title={collapsed ? item.label : undefined}
+            className={cn(
+              'group relative flex h-10 w-full items-center gap-3 rounded-[10px] px-3 text-[13px] font-medium transition-colors',
+              collapsed && 'justify-center px-0',
+              active
+                ? 'border border-blue-500/20 bg-blue-500/10 text-white'
+                : 'text-slate-400 hover:bg-white/[0.045] hover:text-slate-100',
+            )}
+          >
+            {active && <span className="absolute left-0 h-5 w-0.5 rounded-full bg-blue-400" />}
+            <span className={cn('shrink-0 transition-colors', active ? 'text-blue-300' : 'text-slate-500 group-hover:text-blue-300')}>
+              {item.icon}
+            </span>
+            {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   activeTab,
   setActiveTab,
   isSidebarCollapsed,
   setIsSidebarCollapsed,
   tenantInfo,
-  // loading, // unused
   isPro,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
-  const navContainerVariants = {
-    initial: { opacity: 0 },
-    animate: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05,
-      },
-    },
+  const { role, clearAuth, user } = useAuthStore();
+
+  const tenantName = tenantInfo?.name || 'SCMD PRO';
+  const planLabel = isPro ? 'Enterprise SLA' : 'Free';
+  const roleLabel = roleLabelMap[role || ''] || 'Người quản trị';
+  const userName = user?.name || user?.staffId || 'SCMD Operator';
+
+  const handleSelect = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    onCloseMobile?.();
   };
 
-  const navItemVariants = {
-    initial: { opacity: 0, x: -10 },
-    animate: { opacity: 1, x: 0, transition: { duration: 0.3 } },
+  const handleLogout = () => {
+    clearAuth();
+    window.location.href = '/';
   };
+
+  const actionItems: NavItem[] = [
+    { tab: 'overview', label: 'Việc cần xử lý', icon: <ClipboardCheck size={17} /> },
+  ];
+
+  const setupItems: NavItem[] = [
+    { tab: 'vendors', label: 'Nhà thầu & hợp đồng', icon: <Building2 size={17} /> },
+    { tab: 'attendance', label: 'Quân số & ca trực', icon: <CalendarClock size={17} /> },
+    { tab: 'staff', label: 'Nhân sự bảo vệ', icon: <Users size={17} /> },
+    { tab: 'sites', label: 'Điểm & tuyến tuần tra', icon: <Route size={17} /> },
+  ];
+
+  const complianceItems: NavItem[] = [
+    { tab: 'violations', label: 'Tuân thủ dịch vụ', icon: <ShieldCheck size={17} /> },
+    { tab: 'incidents', label: 'Sự cố & SLA', icon: <AlertTriangle size={17} /> },
+    { tab: 'reports', label: 'Báo cáo nghiệm thu', icon: <FileBarChart2 size={17} /> },
+    { tab: 'audit', label: 'Kiểm tra đột xuất', icon: <UserRoundCheck size={17} /> },
+    { tab: 'attachments', label: 'Bằng chứng', icon: <FolderArchive size={17} /> },
+    { tab: 'tasks', label: 'Nhiệm vụ xử lý', icon: <ClipboardCheck size={17} /> },
+  ];
+
+  const configItems: NavItem[] = [
+    { tab: 'settings', label: 'Cài đặt', icon: <Settings size={17} /> },
+    { tab: 'subscription', label: 'Gói dịch vụ', icon: <ReceiptText size={17} /> },
+    { tab: 'help', label: 'Hỗ trợ', icon: <HelpCircle size={17} /> },
+  ];
 
   return (
     <aside
+      aria-label="Điều hướng SCMD PRO"
       className={cn(
-        'bg-scmd-surface text-white flex flex-col shrink-0 border-r border-white/5 transition-all duration-500 relative z-30 shadow-2xl shadow-black/50',
-        isSidebarCollapsed ? 'w-20' : 'w-72',
+        'fixed inset-y-0 left-0 z-[80] flex w-[min(18rem,calc(100vw-1.25rem))] shrink-0 flex-col border-r border-slate-200/10 bg-[#080d1b]/88 text-white shadow-[18px_0_44px_rgba(2,6,23,0.20)] backdrop-blur-xl transition-transform duration-200 md:relative md:inset-auto md:z-30 md:translate-x-0',
+        isMobileOpen ? 'translate-x-0' : '-translate-x-full',
+        isSidebarCollapsed ? 'md:w-20' : 'md:w-72',
       )}
     >
-      {/* Logo */}
-      <div className="p-8 flex items-center justify-between overflow-hidden">
-        {!isSidebarCollapsed && (
-          <div className="flex flex-col animate-in fade-in duration-500">
-            <SCMDLogo variant="dark" size="md" />
-            <p className="text-[9px] text-scmd-silver/60 uppercase font-black tracking-[0.2em] mt-2 ml-[48px]">
-              Enterprise v2.8
-            </p>
+      <div className={cn('border-b border-white/8 p-4', isSidebarCollapsed && 'px-3')}>
+        <div className={cn('flex items-center gap-3', isSidebarCollapsed && 'justify-center')}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.25)]">
+            <MapPinned size={21} />
           </div>
-        )}
-        {isSidebarCollapsed && (
-          <div className="mx-auto">
-            <SCMDLogo variant="icon-only" size="md" />
-          </div>
-        )}
-
-        <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className={cn(
-            'absolute -right-3 top-12 w-6 h-6 bg-scmd-primary text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all z-40 border-2 border-scmd-navy',
-            isSidebarCollapsed && 'rotate-180',
+          {!isSidebarCollapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-[17px] font-bold tracking-[-0.02em] text-white">SCMD PRO</p>
+              <p className="truncate text-[12px] font-medium text-slate-400">{tenantName}</p>
+            </div>
           )}
-        >
-          <ChevronRight size={14} strokeWidth={3} />
-        </button>
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className={cn(
+              'ml-auto hidden h-8 w-8 items-center justify-center rounded-[10px] border border-white/10 text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-white md:flex',
+              isSidebarCollapsed && 'ml-0',
+            )}
+            aria-label={isSidebarCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+          >
+            <Menu size={15} />
+          </button>
+        </div>
+
+        {!isSidebarCollapsed && (
+          <div className="mt-3 flex items-center justify-between gap-2 text-[11px]">
+            <span className="min-w-0 truncate text-slate-400">{roleLabel} · {userName}</span>
+            <span className="shrink-0 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-2 py-0.5 font-semibold text-emerald-300">
+              {planLabel}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Nav */}
-      <motion.nav
-        variants={navContainerVariants}
-        initial="initial"
-        animate="animate"
-        className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto no-scrollbar"
-      >
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'overview'}
-            onClick={() => setActiveTab('overview')}
-            icon={<LayoutDashboard size={20} />}
-            label="Tổng quan"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'audit'}
-            onClick={() => setActiveTab('audit')}
-            icon={<ShieldAlert size={20} />}
-            label="Kiểm tra đột xuất"
-            badge="NEW"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'incidents'}
-            onClick={() => setActiveTab('incidents')}
-            icon={<AlertCircle size={20} />}
-            label="Sự cố"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'tasks'}
-            onClick={() => setActiveTab('tasks')}
-            icon={<ClipboardList size={20} />}
-            label="Nhiệm vụ"
-          />
-        </motion.div>
+      <nav className="flex-1 overflow-y-auto px-4 py-3 no-scrollbar">
+        <SidebarSection title="Việc cần xử lý" items={actionItems} activeTab={activeTab} collapsed={isSidebarCollapsed} onSelect={handleSelect} />
+        <SidebarSection title="Thiết lập vận hành" items={setupItems} activeTab={activeTab} collapsed={isSidebarCollapsed} onSelect={handleSelect} />
+        <SidebarSection title="Giám sát tuân thủ" items={complianceItems} activeTab={activeTab} collapsed={isSidebarCollapsed} onSelect={handleSelect} />
+        <SidebarSection title="Cấu hình" items={configItems} activeTab={activeTab} collapsed={isSidebarCollapsed} onSelect={handleSelect} />
 
-        {!isSidebarCollapsed && (
-          <motion.p variants={navItemVariants} className="px-4 pt-6 pb-2 text-[9px] font-black text-scmd-silver/30 uppercase tracking-[0.2em]">
-            Vận hành
-          </motion.p>
+        {role === 'super-admin' && (
+          <SidebarSection
+            title="Hệ thống"
+            items={[
+              { tab: 'market-growth', label: 'Tăng trưởng', icon: <BarChart3 size={17} /> },
+              { tab: 'usage-analytics', label: 'Phân tích sử dụng', icon: <BarChart3 size={17} /> },
+            ]}
+            activeTab={activeTab}
+            collapsed={isSidebarCollapsed}
+            onSelect={handleSelect}
+          />
         )}
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'sites'}
-            onClick={() => setActiveTab('sites')}
-            icon={<MapPin size={20} />}
-            label="Mục tiêu & Site"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'attendance'}
-            onClick={() => setActiveTab('attendance')}
-            icon={<BarChart3 size={20} />}
-            label="Chấm công"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'attachments'}
-            onClick={() => setActiveTab('attachments')}
-            icon={<FileSearch size={20} />}
-            label="Tài nguyên & Evidence"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'staff'}
-            onClick={() => setActiveTab('staff')}
-            icon={<Users size={20} />}
-            label="Quân số"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'vendors'}
-            onClick={() => setActiveTab('vendors')}
-            icon={<Zap size={20} />}
-            label="Nhà thầu & SLA"
-          />
-        </motion.div>
+      </nav>
 
-        {!isSidebarCollapsed && (
-          <motion.p variants={navItemVariants} className="px-4 pt-6 pb-2 text-[9px] font-black text-scmd-silver/30 uppercase tracking-[0.2em]">
-            Giám sát
-          </motion.p>
-        )}
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'violations'}
-            onClick={() => setActiveTab('violations')}
-            icon={<BrainCircuit size={20} />}
-            label="AI Watcher"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'reports'}
-            onClick={() => setActiveTab('reports')}
-            icon={<BarChart3 size={20} />}
-            label="Báo cáo"
-          />
-        </motion.div>
-
-        {!isSidebarCollapsed && (
-          <motion.p variants={navItemVariants} className="px-4 pt-6 pb-2 text-[9px] font-black text-scmd-silver/30 uppercase tracking-[0.2em]">
-            Intelligence
-          </motion.p>
-        )}
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'market-growth'}
-            onClick={() => setActiveTab('market-growth')}
-            icon={<Zap size={20} />}
-            label="Market Growth"
-            badge="AI"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'usage-analytics'}
-            onClick={() => setActiveTab('usage-analytics')}
-            icon={<BarChart3 size={20} />}
-            label="Usage Analytics"
-          />
-        </motion.div>
-
-        {!isSidebarCollapsed && (
-          <motion.p variants={navItemVariants} className="px-4 pt-6 pb-2 text-[9px] font-black text-scmd-silver/30 uppercase tracking-[0.2em]">
-            Tài khoản
-          </motion.p>
-        )}
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'settings'}
-            onClick={() => setActiveTab('settings')}
-            icon={<Settings size={20} />}
-            label="Cài đặt hệ thống"
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'subscription'}
-            onClick={() => setActiveTab('subscription')}
-            icon={<CreditCard size={20} />}
-            label="Billing & Plan"
-            badge={isPro ? 'PRO' : undefined}
-          />
-        </motion.div>
-        <motion.div variants={navItemVariants}>
-          <NavItem
-            collapsed={isSidebarCollapsed}
-            active={activeTab === 'help'}
-            onClick={() => setActiveTab('help')}
-            icon={<HelpCircle size={20} />}
-            label="Trợ giúp"
-          />
-        </motion.div>
-      </motion.nav>
-
-      {/* Tenant info footer */}
-      {!isSidebarCollapsed && tenantInfo && (
-        <div className="p-6 border-t border-white/5">
-          <div className="flex items-center gap-3 p-4 bg-scmd-navy/50 rounded-2xl border border-white/5">
-            <div className="w-10 h-10 bg-scmd-primary/20 rounded-xl flex items-center justify-center text-scmd-primary">
-              <Shield size={18} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-black text-white truncate">{tenantInfo.name}</p>
-              <p className="text-[9px] text-scmd-silver/40 uppercase font-bold tracking-widest">
-                {isPro ? 'SCMD PRO' : 'SCMD FREE'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Logout */}
-      <div className="px-4 pb-6">
-        <NavItem
-          collapsed={isSidebarCollapsed}
-          active={false}
-          onClick={() => {
-            localStorage.removeItem('scmd_jwt');
-            localStorage.removeItem('scmd_user_role');
-            window.location.href = '/';
-          }}
-          icon={<LogOut size={20} />}
-          label="Đăng xuất"
-        />
+      <div className="border-t border-white/8 p-4">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className={cn(
+            'flex h-10 w-full items-center gap-3 rounded-[10px] border border-red-400/15 bg-red-400/5 px-3 text-[13px] font-semibold text-red-300 transition-colors hover:bg-red-400/10',
+            isSidebarCollapsed && 'justify-center px-0',
+          )}
+          title="Đăng xuất"
+        >
+          <LogOut size={17} />
+          {!isSidebarCollapsed && <span>Đăng xuất</span>}
+        </button>
       </div>
     </aside>
   );
 };
+

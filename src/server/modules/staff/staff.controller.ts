@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
 import { logger } from '../../core/logger/index.js';
 import { INTERNAL_API_SECRET } from '../../core/auth/secrets.js';
+import { timingSafeStringEqual } from '../../core/security/constant-time.js';
 import { RequestContextResolver } from '../../core/context/index.js';
 import { ListStaffUseCase } from './application/list-staff.usecase.js';
 import { CreateStaffUseCase } from './application/create-staff.usecase.js';
@@ -10,11 +10,47 @@ import { DeleteStaffUseCase } from './application/delete-staff.usecase.js';
 import { GetStaffPerformanceUseCase } from './application/get-staff-performance.usecase.js';
 import { AddDisciplinaryActionUseCase } from './application/add-disciplinary-action.usecase.js';
 import { CheckReputationUseCase } from './application/check-reputation.usecase.js';
-import { PDFClient } from '../../infra/pdf/client.js';
+import { ExportStaffCvPdfUseCase } from './application/export-staff-cv-pdf.usecase.js';
 import { StaffRepository } from './staff.repository.js';
 import { createStaffSchema, updateStaffSchema } from './staff.schema.js';
 
 export class StaffController {
+  private static handleStaffBusinessError(err: any, res: Response): boolean {
+    const message = err?.message;
+
+    if (message === 'CONFLICT_USERNAME') {
+      res.status(400).json({ error: 'Tên đăng nhập đã tồn tại' });
+      return true;
+    }
+
+    if (
+      message === 'FORBIDDEN_ACTION' ||
+      message === 'VENDOR_COMMANDER_CAN_ONLY_CREATE_GUARDS' ||
+      message === 'VENDOR_COMMANDER_CAN_ONLY_UPDATE_GUARDS' ||
+      message === 'VENDOR_COMMANDER_CAN_ONLY_DELETE_GUARDS'
+    ) {
+      res.status(403).json({ error: message });
+      return true;
+    }
+
+    if (
+      message === 'VENDOR_SCOPE_REQUIRED' ||
+      message === 'VENDOR_SCOPE_MISMATCH' ||
+      message === 'SITE_SCOPE_MISMATCH' ||
+      message === 'CONTRACT_SCOPE_MISMATCH'
+    ) {
+      res.status(400).json({ error: message });
+      return true;
+    }
+
+    if (message === 'NOT_FOUND_OR_ACCESS_DENIED') {
+      res.status(404).json({ error: message });
+      return true;
+    }
+
+    return false;
+  }
+
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const ctx = RequestContextResolver.resolve(req);
@@ -38,16 +74,21 @@ export class StaffController {
 
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = createStaffSchema.parse(req.body);
+      // FIX [TENANT-ID-BUG]: Parse client body TRƯỚC (không có tenantId),
+      // sau đó inject tenantId từ SecurityContext server-side.
+      // createStaffSchema đã omit tenantId — client không được phép gửi tenantId lên.
+      // SUPER_ADMIN có tenantId="SYSTEM" (không phải UUID) sẽ không bị Zod reject ở bước parse.
       const ctx = RequestContextResolver.resolve(req);
+      const partialData = createStaffSchema.parse(req.body);
+      const data = { ...partialData, tenantId: ctx.tenantId };
       const useCase = new CreateStaffUseCase();
       
       try {
         const staff = await useCase.execute(ctx, data);
         return res.status(201).json(staff);
       } catch (txErr: any) {
-        if (txErr.message === 'CONFLICT_USERNAME') {
-          return res.status(400).json({ error: 'Username already exists' });
+        if (StaffController.handleStaffBusinessError(txErr, res)) {
+          return;
         }
         throw txErr;
       }
@@ -64,7 +105,14 @@ export class StaffController {
       const ctx = RequestContextResolver.resolve(req);
       const useCase = new UpdateStaffUseCase();
       
-      await useCase.execute(ctx, { id: id as string, data });
+      try {
+        await useCase.execute(ctx, { id: id as string, data });
+      } catch (txErr: any) {
+        if (StaffController.handleStaffBusinessError(txErr, res)) {
+          return;
+        }
+        throw txErr;
+      }
       return res.json({ success: true });
     } catch (err: any) {
       logger.error({ err }, 'Update staff error');
@@ -78,7 +126,14 @@ export class StaffController {
       const ctx = RequestContextResolver.resolve(req);
       const useCase = new DeleteStaffUseCase();
       
-      await useCase.execute(ctx, id as string);
+      try {
+        await useCase.execute(ctx, id as string);
+      } catch (txErr: any) {
+        if (StaffController.handleStaffBusinessError(txErr, res)) {
+          return;
+        }
+        throw txErr;
+      }
       return res.json({ success: true });
     } catch (err: any) {
       logger.error({ err }, 'Delete staff error');
@@ -129,29 +184,12 @@ export class StaffController {
     try {
       const { id } = req.params;
       const fields = req.query.fields as string;
-      const validFields = ['name', 'staffId', 'role', 'qualifications', 'certificates', 'rewards', 'disciplines'];
-      const safeFields = (fields || '').split(',').map(f => f.trim()).filter(f => validFields.includes(f)).join(',');
-      
-      // Construct internal URL for PDF service to fetch HTML from
-      const internalUrl = `http://localhost:3000/api/internal/staff/${id}/cv?fields=${encodeURIComponent(safeFields)}`;
-      const internalToken = INTERNAL_API_SECRET;
-      
-      logger.info({ id, internalUrl }, 'Generating PDF for staff');
-
-      const pdfBuffer = await PDFClient.generate(internalUrl, {
-        format: 'A4',
-        printBackground: true
-      }, internalToken);
-
-      // Verification: Check if it's actually a PDF (starts with %PDF)
-      if (pdfBuffer.length < 10 || !pdfBuffer.slice(0, 4).toString().includes('%PDF')) {
-        logger.error({ bufferSample: pdfBuffer.slice(0, 50).toString() }, 'Invalid PDF buffer received');
-        throw new Error('Máy chủ PDF phản hồi dữ liệu không hợp lệ');
-      }
+      const useCase = new ExportStaffCvPdfUseCase();
+      const result = await useCase.execute({ id: id as string, fields });
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=HoSo_${id}.pdf`);
-      return res.send(pdfBuffer);
+      res.setHeader('Content-Disposition', `attachment; filename=${result.fileName}`);
+      return res.send(result.buffer);
     } catch (err: any) {
       logger.error({ err }, 'Export staff PDF error');
       return next(err);
@@ -166,17 +204,14 @@ export class StaffController {
       const expectedToken = INTERNAL_API_SECRET;
       const providedToken = req.headers['x-internal-token'] as string || '';
       
-      const expectedBuf = Buffer.from(expectedToken);
-      const providedBuf = Buffer.from(providedToken);
-      
-      if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+      if (!timingSafeStringEqual(expectedToken, providedToken)) {
         return res.status(403).send('FORBIDDEN');
       }
 
       // SEC-NEW-2: Derive tenantId from staff record to prevent IDOR
       const exportData = await StaffRepository.getInternalExportData(id as string);
 
-      if (!exportData) return res.status(404).send('Staff not found');
+      if (!exportData) return res.status(404).send('Không tìm thấy nhân sự');
 
       const { staff, tenant } = exportData;
 

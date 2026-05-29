@@ -25,6 +25,8 @@ export interface Checkpoint {
   name: string;
   latitude: number;
   longitude: number;
+  siteId?: string | null;
+  guardPostId?: string | null;
   status: CheckpointStatus;
   qr_hash?: string;
   lastCheckedAt?: Date;
@@ -86,11 +88,7 @@ export interface Tenant {
   name: string;
   subdomain: string;
   plan: TenantPlanType;
-  features_enabled?: {
-    patrol: boolean;
-    attendance: boolean;
-    ai_watcher: boolean;
-  };
+  features_enabled?: Record<string, boolean>;
   createdAt: Date;
   status: 'active' | 'suspended';
 }

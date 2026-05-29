@@ -38,8 +38,13 @@ describe('CreateStaffUseCase', () => {
     role: UserRole.GUARD
   };
 
+  // CONTRACT: validRequest PHẢI có tenantId UUID hợp lệ.
+  // tenantId được controller inject từ SecurityContext TRƯỚC khi gọi useCase.execute().
+  // useCase nhận data đã đầy đủ — không bao giờ nhận data thiếu tenantId.
+  const VALID_TENANT_UUID = '123e4567-e89b-12d3-a456-426614174000';
+
   const validRequest = {
-    tenantId: '123e4567-e89b-12d3-a456-426614174000',
+    tenantId: VALID_TENANT_UUID,
     username: 'new_staff',
     password: 'SecurePassword123!',
     fullName: 'New Staff Member',
@@ -55,7 +60,6 @@ describe('CreateStaffUseCase', () => {
 
   describe('authorize', () => {
     it('should throw FORBIDDEN_ACTION if guard tries to create staff', async () => {
-      // TypeScript requires us to pass both context and the request payload
       await expect(useCase.execute(mockGuardContext, validRequest)).rejects.toThrow('FORBIDDEN_ACTION');
     });
 
@@ -66,8 +70,17 @@ describe('CreateStaffUseCase', () => {
   });
 
   describe('validate', () => {
-    it('should fail validation if Zod schema fails', async () => {
+    it('should fail validation if username too short', async () => {
+      mockCheckStaffQuota.mockResolvedValue(true);
       await expect(useCase.validate({ ...validRequest, username: 'yo' }, mockAdminContext)).rejects.toThrow();
+    });
+
+    it('should fail validation if tenantId is not a valid UUID — blocks SYSTEM string', async () => {
+      // Bảo vệ: nếu SUPER_ADMIN tenantId="SYSTEM" lọt vào usecase → phải bị reject
+      mockCheckStaffQuota.mockResolvedValue(true);
+      await expect(
+        useCase.validate({ ...validRequest, tenantId: 'SYSTEM' }, mockAdminContext)
+      ).rejects.toThrow();
     });
 
     it('should fail validation if quota check fails', async () => {
@@ -85,7 +98,6 @@ describe('CreateStaffUseCase', () => {
     it('should call repository.create and log audit event', async () => {
       vi.mocked(StaffRepository.create).mockResolvedValue({ id: 'new-id', ...validRequest } as any);
 
-      // bypass execute wrapping since we already tested authorize/validate
       const result = await (useCase as any).internalExecute(mockAdminContext, validRequest);
 
       expect(StaffRepository.create).toHaveBeenCalledWith(mockAdminContext, validRequest);

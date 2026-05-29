@@ -52,14 +52,17 @@ interface WatcherInsightsProps {
   isPrintMode?: boolean;
 }
 
-export const WatcherInsights: React.FC<WatcherInsightsProps> = ({ 
-  trustScore, 
-  anomalies, 
+export const WatcherInsights: React.FC<WatcherInsightsProps> = ({
+  trustScore,
+  anomalies,
   anomalyStats,
   onFeedback,
   onExportReport,
   isPrintMode = false
 }) => {
+  const searchParams = new URLSearchParams(window.location.search);
+  const focusId = searchParams.get('focusId');
+  const focusType = searchParams.get('focusType');
   const [feedbackNotes, setFeedbackNotes] = React.useState<Record<string, string>>({});
   const [activeFeedback, setActiveFeedback] = React.useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = React.useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL');
@@ -77,6 +80,25 @@ export const WatcherInsights: React.FC<WatcherInsightsProps> = ({
       return matchesSeverity && matchesSearch;
     });
   }, [anomalies, severityFilter, debouncedSearchTerm]);
+
+  const [highlightedAnomalyId, setHighlightedAnomalyId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!focusId || focusType !== 'violation') return;
+
+    const target = filteredAnomalies.find((anomaly) => anomaly.id === focusId);
+    if (!target) return;
+
+    setHighlightedAnomalyId(focusId);
+    const element = document.querySelector(`[data-violation-id="${CSS.escape(focusId)}"]`);
+    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    const timer = window.setTimeout(() => {
+      setHighlightedAnomalyId((current) => current === focusId ? null : current);
+    }, 3500);
+
+    return () => window.clearTimeout(timer);
+  }, [filteredAnomalies, focusId, focusType]);
 
   const handleFeedback = (alertId: string, verdict: 'TRUE_POSITIVE' | 'FALSE_POSITIVE' | 'INCONCLUSIVE') => {
     if (onFeedback) {
@@ -317,13 +339,15 @@ export const WatcherInsights: React.FC<WatcherInsightsProps> = ({
                 filteredAnomalies.map((anomaly) => (
                   <motion.div
                     key={anomaly.id}
+                    data-violation-id={anomaly.id}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     className={cn(
                       "p-5 rounded-2xl border flex items-start gap-5 transition-all hover:translate-x-1 shadow-lg",
-                      anomaly.severity === 'CRITICAL' 
-                        ? "bg-red-500/5 border-red-500/10" 
-                        : "bg-amber-500/5 border-amber-500/10"
+                      anomaly.severity === 'CRITICAL'
+                        ? "bg-red-500/5 border-red-500/10"
+                        : "bg-amber-500/5 border-amber-500/10",
+                      highlightedAnomalyId === anomaly.id && "border-scmd-primary/70 bg-scmd-primary/10 ring-2 ring-scmd-primary/40 shadow-scmd-primary/15"
                     )}
                   >
                     <div className={cn(

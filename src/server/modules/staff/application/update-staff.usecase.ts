@@ -8,23 +8,35 @@ import { CacheManager } from '../../../core/cache/manager.js';
 
 export type UpdateStaffData = Partial<Omit<Staff, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>>;
 
-// StaffJSON phản ánh chính xác contract của StaffEntity.toJSON():
-//   - password bị omit (security rule FIX 5.1)
-//   - tokenVersion không có trong StaffProps
-//   - createdAt/updatedAt là string (do .toISOString())
-//   - role/status dùng đúng literal union (phải khớp với UpdateStaffData để assign 2 chiều)
-type StaffRole = 'guard' | 'supervisor' | 'technician' | 'tenant-admin' | 'super-admin';
+type StaffRole =
+  | 'guard'
+  | 'supervisor'
+  | 'technician'
+  | 'tenant-admin'
+  | 'super-admin'
+  | 'vendor-commander'
+  | 'vendor-representative';
+
 type StaffStatus = 'active' | 'inactive' | 'suspended';
 
 type StaffJSON = {
   id: string;
   tenantId: string;
   username: string;
+  email: string;
   fullName: string;
+  staffId?: string | null;
   phone?: string | null;
   role: StaffRole;
+  assignedVendorId?: string | null;
+  assignedSiteId?: string | null;
+  assignedContractId?: string | null;
   status: StaffStatus;
   qualifications?: string[];
+  password?: string;
+  idNumber?: string | null;
+  licenseNumber?: string | null;
+  idExpiry?: Date | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -32,6 +44,9 @@ type StaffJSON = {
 export class UpdateStaffUseCase extends BaseUseCase<{ id: string; data: UpdateStaffData }, StaffJSON> {
   override async authorize(context: SecurityContext, request: { id: string; data: UpdateStaffData }): Promise<void> {
     if (context.role === UserRole.GUARD && context.userId !== request.id) {
+      throw new Error('FORBIDDEN_ACTION');
+    }
+    if (context.role === UserRole.VENDOR_REPRESENTATIVE) {
       throw new Error('FORBIDDEN_ACTION');
     }
   }
@@ -50,11 +65,28 @@ export class UpdateStaffUseCase extends BaseUseCase<{ id: string; data: UpdateSt
     }
 
     const isAdmin = context.role === UserRole.TENANT_ADMIN || context.role === UserRole.SUPER_ADMIN;
+    const isVendorCommander = context.role === UserRole.VENDOR_COMMANDER;
     const currentStaff = staff.toJSON() as StaffJSON;
+    const requestedScopeChange =
+      data.assignedVendorId !== undefined ||
+      data.assignedSiteId !== undefined ||
+      data.assignedContractId !== undefined;
 
-    if (!isAdmin) {
+    if (isVendorCommander) {
+      if (currentStaff.role !== UserRole.GUARD) {
+        throw new Error('VENDOR_COMMANDER_CAN_ONLY_UPDATE_GUARDS');
+      }
       data.role = currentStaff.role;
       data.status = currentStaff.status;
+      data.assignedVendorId = currentStaff.assignedVendorId ?? context.assignedVendorId ?? null;
+      data.assignedSiteId = currentStaff.assignedSiteId ?? context.assignedSiteId ?? null;
+      data.assignedContractId = currentStaff.assignedContractId ?? context.assignedContractId ?? null;
+    } else if (!isAdmin) {
+      data.role = currentStaff.role;
+      data.status = currentStaff.status;
+      data.assignedVendorId = currentStaff.assignedVendorId ?? null;
+      data.assignedSiteId = currentStaff.assignedSiteId ?? null;
+      data.assignedContractId = currentStaff.assignedContractId ?? null;
     } else {
       if (data.role === UserRole.SUPER_ADMIN && context.role !== UserRole.SUPER_ADMIN) {
         logger.warn({ actorId: context.userId, targetId: id }, 'SECURITY VIOLATION: TenantAdmin attempted to promote a user to SuperAdmin. Blocked.');
@@ -66,19 +98,58 @@ export class UpdateStaffUseCase extends BaseUseCase<{ id: string; data: UpdateSt
       }
     }
 
-    if (data.fullName || data.phone !== undefined) {
-      staff.updateProfile(data.fullName ?? currentStaff.fullName, data.role ?? currentStaff.role, data.phone);
+    const hasProfileChange =
+      data.fullName !== undefined ||
+      data.staffId !== undefined ||
+      data.phone !== undefined ||
+      data.idNumber !== undefined ||
+      data.licenseNumber !== undefined ||
+      data.idExpiry !== undefined;
+
+    if (hasProfileChange) {
+      staff.updateProfile(
+        data.fullName ?? currentStaff.fullName,
+        data.role ?? currentStaff.role,
+        data.phone,
+        data.idNumber !== undefined ? (data.idNumber ?? null) : undefined,
+        data.licenseNumber !== undefined ? (data.licenseNumber ?? null) : undefined,
+        data.idExpiry !== undefined ? (data.idExpiry ? new Date(data.idExpiry as string) : null) : undefined,
+        data.staffId !== undefined ? (data.staffId ?? null) : undefined,
+      );
     }
-    if (data.status === 'inactive') staff.deactivate();
-    else if (data.status === 'active') staff.activate();
+
+    if (requestedScopeChange && typeof (staff as any).updateAssignmentScope === 'function') {
+      (staff as any).updateAssignmentScope({
+        assignedVendorId: data.assignedVendorId,
+        assignedSiteId: data.assignedSiteId,
+        assignedContractId: data.assignedContractId,
+      });
+    }
+
+    if (typeof data.username === 'string' && data.username.trim() !== '' && data.username !== currentStaff.username) {
+      if (typeof (staff as any).updateUsername === 'function') {
+        (staff as any).updateUsername(data.username);
+      }
+    }
+
+    if (data.email && data.email !== currentStaff.email) {
+      staff.updateEmail(data.email);
+    }
+
+    const trimmedPassword = typeof data.password === 'string' ? data.password.trim() : undefined;
+    if (trimmedPassword) {
+      (staff as unknown as { getProps(): { password?: string } }).getProps().password = trimmedPassword;
+    }
+
+    if (isAdmin) {
+      if (data.status === 'inactive') staff.deactivate();
+      else if (data.status === 'active') staff.activate();
+    }
     if (data.qualifications) staff.updateQualifications(data.qualifications);
 
     await StaffRepository.save(context, staff);
-    
-    // SEC-FIX [M-01]: Invalidate auth metadata cache immediately on change
-    // Using CacheManager.del to ensure both L1 and L2 (Redis) caches are invalidated.
     await CacheManager.del(`auth_metadata:${id}`);
-    
+
     const updated = staff.toJSON() as StaffJSON;
 
     await AuditService.logSensitiveChange(
@@ -87,7 +158,7 @@ export class UpdateStaffUseCase extends BaseUseCase<{ id: string; data: UpdateSt
       'UPDATE_STAFF',
       `staff/${id}`,
       currentStaff,
-      updated
+      updated,
     );
 
     return updated;

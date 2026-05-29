@@ -9,6 +9,65 @@ import { cache } from '../../core/cache/index.js';
 import { db } from '../../core/db/prisma.js';
 import { z } from 'zod';
 
+
+const maskSensitiveSettings = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(maskSensitiveSettings);
+  if (!value || typeof value !== 'object') return value;
+
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/pass(word)?|secret|token|key/i.test(key)) {
+      result[key] = child ? '********' : child;
+    } else {
+      result[key] = maskSensitiveSettings(child);
+    }
+  }
+  return result;
+};
+
+const preserveMaskedSecrets = (current: any, next: any): any => {
+  const smtpPass = next?.notifications?.email?.smtpPass;
+  if ((smtpPass === '' || smtpPass === '********') && current?.notifications?.email?.smtpPass) {
+    return {
+      ...next,
+      notifications: {
+        ...next.notifications,
+        email: {
+          ...next.notifications.email,
+          smtpPass: current.notifications.email.smtpPass,
+        },
+      },
+    };
+  }
+  return next;
+};
+
+const feedbackSeverityValues = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+const feedbackTypeValues = ['BUG', 'SUPPORT', 'FEATURE_REQUEST', 'OTHER'] as const;
+
+const normalizeUpper = (value: unknown) => (typeof value === 'string' ? value.trim().toUpperCase() : value);
+
+const feedbackPayloadSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  description: z.string().trim().min(5).max(4000).optional(),
+  message: z.string().trim().min(5).max(4000).optional(),
+  severity: z.preprocess(normalizeUpper, z.enum(feedbackSeverityValues).optional()),
+  priority: z.preprocess(normalizeUpper, z.enum(feedbackSeverityValues).optional()),
+  type: z.preprocess(normalizeUpper, z.enum(feedbackTypeValues).optional()),
+}).superRefine((value, ctx) => {
+  if (!value.description && !value.message) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'description is required', path: ['description'] });
+  }
+
+  if (value.severity && value.priority && value.severity !== value.priority) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'AMBIGUOUS_FEEDBACK_SEVERITY',
+      path: ['severity'],
+    });
+  }
+});
+
 export class TenantController {
   static async requestUpgrade(req: any, res: Response, next: NextFunction) {
     try {
@@ -37,21 +96,17 @@ export class TenantController {
     try {
       const tenantId = req.user.tenantId;
       const userId = req.user.id;
-      const data = z.object({
-        title: z.string(),
-        description: z.string(),
-        severity: z.string().optional(),
-        type: z.string().optional()
-      }).parse(req.body);
+      const data = feedbackPayloadSchema.parse(req.body);
+      const severity = data.severity || data.priority || 'LOW';
 
       const useCase = new SubmitFeedbackUseCase();
       const feedback = await useCase.execute({
         tenantId,
         userId,
         title: data.title,
-        description: data.description,
-        severity: data.severity,
-        type: data.type
+        description: data.description || data.message || '',
+        severity,
+        type: data.type || 'SUPPORT'
       });
 
       return res.status(201).json(feedback);
@@ -64,11 +119,13 @@ export class TenantController {
   static async getSettings(req: any, res: Response, next: NextFunction) {
     try {
       const tenantId = req.user.tenantId;
-      const tenant = await db.system().tenant.findUnique({
-        where: { id: tenantId },
-        select: { featuresEnabled: true }
+      const tenant = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.tenant.findUnique({
+          where: { id: tenantId },
+          select: { featuresEnabled: true }
+        });
       });
-      return res.json({ settings: tenant?.featuresEnabled || {} });
+      return res.json({ settings: maskSensitiveSettings(tenant?.featuresEnabled || {}) });
     } catch (err: any) {
       logger.error({ err }, 'Get settings error');
       return next(err);
@@ -82,19 +139,25 @@ export class TenantController {
         settings: z.record(z.any())
       }).parse(req.body);
       
-      const current = await db.system().tenant.findUnique({
-        where: { id: tenantId },
-        select: { featuresEnabled: true }
+      const current = await db.withTenant('SYSTEM', async (tx) => {
+        return await tx.tenant.findUnique({
+          where: { id: tenantId },
+          select: { featuresEnabled: true }
+        });
       });
       
-      const updatedFeatures = {
-        ...(current?.featuresEnabled as object || {}),
+      const currentFeatures = (current?.featuresEnabled as Record<string, any>) || {};
+      const requestedFeatures = {
+        ...currentFeatures,
         ...data.settings
       };
+      const updatedFeatures = preserveMaskedSecrets(currentFeatures, requestedFeatures);
       
-      await db.system().tenant.update({
-        where: { id: tenantId },
-        data: { featuresEnabled: updatedFeatures }
+      await db.withTenant('SYSTEM', async (tx) => {
+        await tx.tenant.update({
+          where: { id: tenantId },
+          data: { featuresEnabled: updatedFeatures }
+        });
       });
       
       try {
@@ -107,15 +170,15 @@ export class TenantController {
           ip: req.ip,
           userAgent: req.headers['user-agent'],
           diff: {
-            before: current?.featuresEnabled as object || {},
-            after: updatedFeatures
+            before: maskSensitiveSettings(current?.featuresEnabled as object || {}),
+            after: maskSensitiveSettings(updatedFeatures)
           }
         });
       } catch(auditErr) {
         logger.error({ err: auditErr }, 'Failed to write audit log for update settings');
       }
       
-      return res.json({ success: true, settings: updatedFeatures });
+      return res.json({ success: true, settings: maskSensitiveSettings(updatedFeatures) });
     } catch (err: any) {
       logger.error({ err }, 'Update settings error');
       return next(err);
@@ -137,6 +200,151 @@ export class TenantController {
       return res.json(result);
     } catch (err: any) {
       logger.error({ err }, 'Get me error');
+      return next(err);
+    }
+  }
+
+  static async getGuardProfile(req: any, res: Response, next: NextFunction) {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const today = new Date().toISOString().slice(0, 10);
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const result = await db.withTenant(tenantId, async (tx) => {
+        const staff = await tx.staff.findFirst({
+          where: { id: userId },
+          select: {
+            id: true,
+            fullName: true,
+            staffId: true,
+            status: true,
+            assignedVendorId: true,
+            assignedSiteId: true,
+            assignedContractId: true,
+          },
+        });
+
+        if (!staff) {
+          return null;
+        }
+
+        const [vendor, site, contract, assignment, attendanceHistory] = await Promise.all([
+          staff.assignedVendorId
+            ? tx.vendor.findFirst({
+                where: { id: staff.assignedVendorId },
+                select: { id: true, name: true, status: true },
+              })
+            : Promise.resolve(null),
+          staff.assignedSiteId
+            ? tx.site.findFirst({
+                where: { id: staff.assignedSiteId },
+                select: { id: true, siteName: true, address: true, status: true },
+              })
+            : Promise.resolve(null),
+          staff.assignedContractId
+            ? tx.contract.findFirst({
+                where: { id: staff.assignedContractId },
+                select: { id: true, contractName: true, contractCode: true, status: true },
+              })
+            : Promise.resolve(null),
+          tx.shiftAssignment.findFirst({
+            where: {
+              staffId: staff.id,
+              status: 'ASSIGNED',
+              ...(staff.assignedVendorId ? { vendorId: staff.assignedVendorId } : {}),
+              ...(staff.assignedSiteId ? { siteId: staff.assignedSiteId } : {}),
+              ...(staff.assignedContractId ? { contractId: staff.assignedContractId } : {}),
+              shiftSchedule: {
+                date: today,
+                ...(staff.assignedSiteId ? { siteId: staff.assignedSiteId } : {}),
+                ...(staff.assignedContractId ? { contractId: staff.assignedContractId } : {}),
+              },
+            },
+            orderBy: { assignedAt: 'desc' },
+            select: {
+              id: true,
+              status: true,
+              shiftSchedule: {
+                select: {
+                  id: true,
+                  date: true,
+                  shiftType: true,
+                  startTime: true,
+                  endTime: true,
+                  positionName: true,
+                  guardPost: {
+                    select: { id: true, postName: true, postType: true },
+                  },
+                },
+              },
+            },
+          }),
+          tx.attendanceRecord.findMany({
+            where: {
+              staffId: staff.id,
+              createdAt: { gte: sevenDaysAgo },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            select: {
+              id: true,
+              type: true,
+              createdAt: true,
+              isValid: true,
+              checkInAt: true,
+              checkOutAt: true,
+              lateMinutes: true,
+              earlyLeaveMinutes: true,
+              shiftSchedule: {
+                select: {
+                  id: true,
+                  date: true,
+                  shiftType: true,
+                  siteId: true,
+                  guardPost: {
+                    select: { id: true, postName: true },
+                  },
+                },
+              },
+            },
+          }),
+        ]);
+
+        const warnings = [
+          !staff.staffId ? 'Thiếu mã nhân sự/ID.' : null,
+          !staff.assignedVendorId ? 'Chưa gắn vendor phụ trách.' : null,
+          !staff.assignedSiteId ? 'Chưa gắn site làm việc.' : null,
+          !staff.assignedContractId ? 'Chưa gắn hợp đồng/SLA.' : null,
+          !assignment ? 'Chưa có ca trực được phân công hôm nay.' : null,
+        ].filter(Boolean);
+
+        return {
+          guard: {
+            id: staff.id,
+            fullName: staff.fullName,
+            staffId: staff.staffId,
+            status: staff.status,
+          },
+          scope: {
+            vendor,
+            site,
+            contract,
+          },
+          todayShift: assignment?.shiftSchedule ?? null,
+          attendanceHistory,
+          warnings,
+        };
+      });
+
+      if (!result) {
+        return res.status(404).json({ error: 'GUARD_PROFILE_NOT_FOUND' });
+      }
+
+      return res.json(result);
+    } catch (err: any) {
+      logger.error({ err }, 'Get guard profile error');
       return next(err);
     }
   }
@@ -190,8 +398,8 @@ export class TenantController {
         ]
       };
 
-      // Set to redis, expire in 5 minutes (300 seconds)
-      await cache.set(cacheKey, result, 300);
+      // Operational dashboard data must not stay stale after patrol/incident updates.
+      await cache.set(cacheKey, result, 60);
 
       return res.json(result);
     } catch (err: any) {

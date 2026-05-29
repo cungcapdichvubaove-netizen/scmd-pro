@@ -17,8 +17,9 @@ export class PDFClient {
       });
       
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(`PDF Service responded with ${res.status}: ${err.error || res.statusText}`);
+        const err = await res.json().catch(() => ({}) as Record<string, unknown>);
+        const errMsg = (err as Record<string, unknown>).error;
+        throw new Error(`PDF Service responded with ${res.status}: ${typeof errMsg === 'string' ? errMsg : res.statusText}`);
       }
       
       const arrayBuffer = await res.arrayBuffer();
@@ -46,8 +47,9 @@ export class PDFClient {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(`Screenshot Service failed: ${err.error || res.statusText}`);
+      const err = await res.json().catch(() => ({}) as Record<string, unknown>);
+      const errMsg = (err as Record<string, unknown>).error;
+      throw new Error(`Screenshot Service failed: ${typeof errMsg === 'string' ? errMsg : res.statusText}`);
     }
 
     const arrayBuffer = await res.arrayBuffer();

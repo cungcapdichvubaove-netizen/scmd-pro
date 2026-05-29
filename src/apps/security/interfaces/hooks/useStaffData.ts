@@ -1,16 +1,27 @@
 import { useState, useCallback, useEffect } from 'react';
 import { apiFetch } from '../../../../lib/api';
 import type { Staff } from '../types';
+import { useAuthStore } from '../../../common/store/useAuthStore';
 
 export function useStaffData() {
+  const tenantId = useAuthStore((state) => state.tenantId);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [isStaffLoading, setIsStaffLoading] = useState(false);
   const [staffFilters, setStaffFilters] = useState({ search: '', role: 'all', status: 'all' });
+  const [staffError, setStaffError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
 
   const fetchStaff = useCallback(async (overrides?: Partial<{ search: string; role: string; status: string }>, cursor?: string) => {
+    if (!tenantId) {
+      setStaff([]);
+      setNextCursor(null);
+      setHasMore(false);
+      return;
+    }
+
     setIsStaffLoading(true);
+    setStaffError(null);
     try {
       const filters = overrides ? { ...staffFilters, ...overrides } : staffFilters;
       const query = new URLSearchParams();
@@ -33,10 +44,11 @@ export function useStaffData() {
       setHasMore(!!staffData?.nextCursor);
     } catch (err) {
       console.error('Error fetching staff:', err);
+      setStaffError('Không thể tải danh sách nhân sự. Vui lòng thử lại.');
     } finally {
       setIsStaffLoading(false);
     }
-  }, [staffFilters]);
+  }, [staffFilters, tenantId]);
 
   const loadMoreStaff = useCallback(() => {
     if (nextCursor && !isStaffLoading) {
@@ -46,17 +58,25 @@ export function useStaffData() {
 
   // Reactive fetch when filters change (resets list)
   useEffect(() => {
-    fetchStaff();
-  }, [staffFilters.search, staffFilters.role, staffFilters.status]);
+    if (!tenantId) {
+      setStaff([]);
+      setNextCursor(null);
+      setHasMore(false);
+      return;
+    }
 
-  return { 
-    staff, 
-    setStaff, 
-    isStaffLoading, 
-    setIsStaffLoading, 
-    fetchStaff, 
-    loadMoreStaff, 
-    staffFilters, 
+    fetchStaff();
+  }, [fetchStaff, staffFilters.search, staffFilters.role, staffFilters.status, tenantId]);
+
+  return {
+    staff,
+    setStaff,
+    isStaffLoading,
+    setIsStaffLoading,
+    staffError,
+    fetchStaff,
+    loadMoreStaff,
+    staffFilters,
     setStaffFilters,
     nextCursor,
     hasMore

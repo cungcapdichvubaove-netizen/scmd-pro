@@ -57,7 +57,7 @@ export const WorkspaceFinder: React.FC<WorkspaceFinderProps> = ({ onFind, onBack
           <h1 className="text-3xl font-black text-white tracking-tight mb-2">TÌM KHÔNG GIAN LÀM VIỆC</h1>
           <p className="text-[var(--color-text-muted)] font-medium">Nhập địa chỉ URL SCMD của công ty bạn</p>
           <div className="mt-4 text-xs font-semibold text-[var(--color-primary-accent)]/80 bg-[var(--color-primary-accent)]/10 py-1.5 px-3 rounded-full inline-block border border-[var(--color-primary-accent)]/20">
-            Dữ liệu thử nghiệm: "system" hoặc "vinhomes"
+            Demo nhanh: nhập workspace "ktcsecurity"
           </div>
         </div>
 
@@ -70,7 +70,7 @@ export const WorkspaceFinder: React.FC<WorkspaceFinderProps> = ({ onFind, onBack
               <div className="flex items-center">
                 <input 
                   type="text" 
-                  placeholder="ten-cong-ty"
+                  placeholder="ktcsecurity"
                   className={cn(
                     "flex-1 h-14 px-5 bg-[var(--color-surface)]/5 border rounded-l-[var(--radius-lg)] text-white font-bold focus:outline-none transition-all",
                     error ? "border-[var(--color-danger)]" : "border-[var(--color-border)]/20 focus:border-[var(--color-primary)]"

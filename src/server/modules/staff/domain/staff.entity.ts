@@ -5,8 +5,12 @@ export interface StaffProps {
   username: string;
   email: string;
   fullName: string;
+  staffId?: string | null;
   phone?: string | null;
   role: string;
+  assignedVendorId?: string | null;
+  assignedSiteId?: string | null;
+  assignedContractId?: string | null;
   status: string;
   password?: string;
   qualifications?: string[];
@@ -23,8 +27,12 @@ export class StaffEntity extends BaseEntity<StaffProps> {
   get username(): string { return this._props.username; }
   get email(): string { return this._props.email; }
   get fullName(): string { return this._props.fullName; }
+  get staffId(): string | undefined | null { return this._props.staffId; }
   get phone(): string | undefined | null { return this._props.phone; }
   get role(): string { return this._props.role; }
+  get assignedVendorId(): string | undefined | null { return this._props.assignedVendorId; }
+  get assignedSiteId(): string | undefined | null { return this._props.assignedSiteId; }
+  get assignedContractId(): string | undefined | null { return this._props.assignedContractId; }
   get status(): string { return this._props.status; }
   get password(): string | undefined { return this._props.password; }
   get qualifications(): string[] { return this._props.qualifications || []; }
@@ -49,12 +57,13 @@ export class StaffEntity extends BaseEntity<StaffProps> {
   }
 
   public updateProfile(
-    fullName: string, 
-    role?: string, 
-    phone?: string | null, 
-    idNumber?: string | null, 
-    licenseNumber?: string | null, 
-    idExpiry?: Date | null
+    fullName: string,
+    role?: string,
+    phone?: string | null,
+    idNumber?: string | null,
+    licenseNumber?: string | null,
+    idExpiry?: Date | null,
+    staffId?: string | null,
   ): void {
     if (!fullName || fullName.trim() === '') {
       throw new Error('Full name cannot be empty');
@@ -75,11 +84,48 @@ export class StaffEntity extends BaseEntity<StaffProps> {
     if (idExpiry !== undefined) {
       this._props.idExpiry = idExpiry;
     }
+    if (staffId !== undefined) {
+      this._props.staffId = staffId;
+    }
+    this._updatedAt = new Date();
+  }
+
+  public updateEmail(email: string): void {
+    if (!email || email.trim() === '') {
+      throw new Error('Email cannot be empty');
+    }
+    this._props.email = email.trim().toLowerCase();
+    this._updatedAt = new Date();
+  }
+
+  public updateUsername(username: string): void {
+    const normalized = typeof username === 'string' ? username.trim() : '';
+    if (!normalized) {
+      throw new Error('Username cannot be empty');
+    }
+    this._props.username = normalized;
     this._updatedAt = new Date();
   }
 
   public updateQualifications(qualifications: string[]): void {
     this._props.qualifications = qualifications;
+    this._updatedAt = new Date();
+  }
+
+  public updateAssignmentScope(scope: {
+    assignedVendorId?: string | null;
+    assignedSiteId?: string | null;
+    assignedContractId?: string | null;
+  }): void {
+    if (scope.assignedVendorId !== undefined) {
+      this._props.assignedVendorId = scope.assignedVendorId;
+    }
+    if (scope.assignedSiteId !== undefined) {
+      this._props.assignedSiteId = scope.assignedSiteId;
+    }
+    if (scope.assignedContractId !== undefined) {
+      this._props.assignedContractId = scope.assignedContractId;
+    }
     this._updatedAt = new Date();
   }
 

@@ -1,8 +1,21 @@
+import { z } from 'zod';
 import { SecurityContext, LocationDTO } from '../../architecture/types.js';
 import { AttendanceType } from '../../../domain/entities.js';
 import { db } from '../../db/prisma.js';
+import { getOperationalDayStart } from '../../time/tenant-time.js';
+import { BadRequestError } from '../../errors/domain.error.js';
 
 import { AttendanceCalculator } from './attendance-calculator.js';
+
+const checkOutPayloadSchema = z.object({
+  location: z.object({
+    lat: z.number(),
+    lon: z.number(),
+    accuracy: z.number().optional(),
+  }).optional(),
+  imageUri: z.string().optional(),
+  notes: z.string().optional(),
+});
 
 interface CheckOutPayload {
   location?: LocationDTO;
@@ -12,8 +25,12 @@ interface CheckOutPayload {
 
 export class AttendanceCheckOutUseCase {
   async execute(ctx: SecurityContext, payload: CheckOutPayload) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const validated = checkOutPayloadSchema.safeParse(payload);
+    if (!validated.success) {
+      throw new BadRequestError(`Dữ liệu check-out không hợp lệ: ${validated.error.errors.map((e) => e.message).join(', ')}`);
+    }
+
+    const today = getOperationalDayStart();
 
     // Find the open check-in record for today
     const openCheckIn = await db.forTenant(ctx.tenantId).attendanceRecord.findFirst({
@@ -58,9 +75,9 @@ export class AttendanceCheckOutUseCase {
           tenantId: ctx.tenantId,
           staffId: ctx.userId,
           type: AttendanceType.CHECK_OUT,
-          location: payload.location ? (payload.location as any) : null,
-          imageUri: payload.imageUri || null,
-          notes: payload.notes || null,
+          location: validated.data.location ? (validated.data.location as any) : null,
+          imageUri: validated.data.imageUri || null,
+          notes: validated.data.notes || null,
           shiftScheduleId: openCheckIn.shiftScheduleId,
           checkInAt: openCheckIn.checkInAt,
           checkOutAt: checkOutTime,

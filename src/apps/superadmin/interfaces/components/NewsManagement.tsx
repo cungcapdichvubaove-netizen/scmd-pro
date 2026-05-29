@@ -10,7 +10,6 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   XCircle,
-  Loader2,
   Globe,
   Tag,
   FileText,
@@ -21,6 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../../../lib/utils';
 import { getAuthHeaders } from '../../../common/utils/auth';
 import { useDebounce } from '../../../common/hooks/useDebounce';
+import { DashboardPageHeading, DashboardSpinner } from '../../../common/interfaces/components/DashboardUI';
 
 interface NewsItem {
   id: string;
@@ -69,8 +69,11 @@ export const NewsManagement: React.FC = () => {
         headers: getAuthHeaders()
       });
       if (res.ok) {
-        const data = await res.json();
-        setNews(data);
+        const json = await res.json();
+        // FIX BUG3: Backend NewsRepository.getAll() trả về paginated { data, nextCursor, hasMore }
+        // setNews phải nhận array items, không phải cả object paginated
+        const items: NewsItem[] = Array.isArray(json) ? json : (json.data ?? []);
+        setNews(items);
       }
     } catch (err) {
       console.error("Error fetching news:", err);
@@ -165,7 +168,7 @@ export const NewsManagement: React.FC = () => {
     <div className="space-y-10 animate-in fade-in duration-700">
       <header className="flex justify-between items-center bg-slate-900/40 backdrop-blur-md p-8 rounded-[32px] border border-white/5">
         <div>
-          <h2 className="text-4xl font-black tracking-tighter text-white">Quản lý Tin tức</h2>
+          <DashboardPageHeading>Quản lý Tin tức</DashboardPageHeading>
           <p className="text-slate-400 mt-2 font-medium">Hệ thống CMS chiến lược cho SCMD Pro.</p>
         </div>
         <button 
@@ -202,10 +205,7 @@ export const NewsManagement: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="py-20 text-center">
-            <Loader2 className="animate-spin mx-auto text-sky-500" size={48} />
-            <p className="mt-4 text-slate-500 font-black uppercase tracking-widest text-xs">Đang tải dữ liệu...</p>
-          </div>
+          <DashboardSpinner message="Đang tải dữ liệu..." />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 p-8">
             <AnimatePresence mode="popLayout">
@@ -216,7 +216,7 @@ export const NewsManagement: React.FC = () => {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="bg-slate-950/40 border border-white/5 rounded-[40px] p-6 shadow-2xl group hover:border-sky-500/30 transition-all flex flex-col h-full"
+                  className="bg-slate-950/40 border border-white/5 rounded-xl p-6 shadow-2xl group hover:border-sky-500/30 transition-all flex flex-col h-full"
                 >
                   <div className="relative aspect-video rounded-[28px] overflow-hidden mb-6">
                     <img 
@@ -267,7 +267,7 @@ export const NewsManagement: React.FC = () => {
               ))}
             </AnimatePresence>
             {filteredNews.length === 0 && (
-              <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[40px]">
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-xl">
                 <Newspaper className="mx-auto text-slate-800 mb-4" size={48} />
                 <p className="text-slate-600 font-bold">Không tìm thấy bài viết nào phù hợp.</p>
               </div>
@@ -291,7 +291,7 @@ export const NewsManagement: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-slate-900 w-full max-w-6xl max-h-[90vh] rounded-[48px] shadow-2xl border border-white/10 overflow-hidden flex flex-col pointer-events-auto relative"
+              className="bg-slate-900 w-full max-w-6xl max-h-[90vh] rounded-xl shadow-2xl border border-white/10 overflow-hidden flex flex-col pointer-events-auto relative"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-8 border-b border-white/5 flex justify-between items-center bg-slate-900/50 backdrop-blur-md">
@@ -303,7 +303,7 @@ export const NewsManagement: React.FC = () => {
                     <h3 className="text-3xl font-black text-white tracking-tight">{editingNews ? 'Hiệu chỉnh văn bản' : 'Khởi tạo nội dung mới'}</h3>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                      <p className="text-[10px] text-slate-500 font-black tracking-[0.2em] uppercase">Intelligence CMS Core</p>
+                      <p className="text-[10px] text-slate-500 font-black tracking-[0.2em] uppercase">Lõi CMS tình báo</p>
                     </div>
                   </div>
                 </div>
@@ -346,7 +346,7 @@ export const NewsManagement: React.FC = () => {
                             required
                             value={form.content}
                             onChange={(e) => setForm({...form, content: e.target.value})}
-                            className="w-full p-8 bg-slate-950/50 border border-white/10 rounded-[40px] text-white font-medium text-base focus:outline-none focus:border-sky-500/30 min-h-[500px] resize-none leading-relaxed placeholder:text-slate-800"
+                            className="w-full p-8 bg-slate-950/50 border border-white/10 rounded-xl text-white font-medium text-base focus:outline-none focus:border-sky-500/30 min-h-[500px] resize-none leading-relaxed placeholder:text-slate-800"
                             placeholder="Khởi đầu bài viết bằng một câu nói ấn tượng..."
                           />
                           <div className="absolute bottom-6 right-8 flex items-center gap-2">
@@ -360,7 +360,7 @@ export const NewsManagement: React.FC = () => {
 
                   <div className="space-y-10">
                     {/* Meta & Settings Sidebar */}
-                    <div className="space-y-8 bg-white/5 p-8 rounded-[40px] border border-white/5">
+                    <div className="space-y-8 bg-white/5 p-8 rounded-xl border border-white/5">
                       <div className="flex items-center gap-2 mb-2">
                         <Settings size={14} className="text-sky-500" />
                         <h4 className="text-xs font-black text-white uppercase tracking-[0.2em]">Cấu hình xuất bản</h4>
@@ -419,7 +419,7 @@ export const NewsManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-8 bg-white/5 p-8 rounded-[40px] border border-white/5">
+                    <div className="space-y-8 bg-white/5 p-8 rounded-xl border border-white/5">
                       <div className="flex items-center gap-2 mb-2">
                         <Globe size={14} className="text-sky-500" />
                         <h4 className="text-xs font-black text-white uppercase tracking-[0.2em]">SEO Optimization</h4>

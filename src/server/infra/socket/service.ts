@@ -4,6 +4,7 @@ import { logger } from '../../core/logger/index.js';
 import { AuthProviderFactory } from '../../core/auth/auth.provider.factory.js';
 import { UserRole } from '../../core/architecture/types.js';
 import { redisClient } from '../../core/redis.js';
+import { getAccessTokenCookie, parseCookieHeader } from '../../modules/auth/auth.cookies.js';
 
 
 export class SocketService {
@@ -56,13 +57,16 @@ export class SocketService {
 
     // Authentication Middleware
     this.io.use(async (socket, next) => {
-      const token = socket.handshake.auth.token || socket.handshake.headers['authorization'];
+      const authToken = socket.handshake.auth.token || socket.handshake.headers['authorization'];
+      const cookies = parseCookieHeader(socket.handshake.headers.cookie);
+      const cookieToken = getAccessTokenCookie(cookies);
+      const token = authToken || cookieToken;
       if (!token) {
         return next(new Error('Authentication error: No token provided'));
       }
 
       // Handle "Bearer <token>" format if present
-      const tokenValue = token.startsWith('Bearer ') ? token.slice(7) : token;
+      const tokenValue = typeof token === 'string' && token.startsWith('Bearer ') ? token.slice(7) : token;
       
       const authProvider = AuthProviderFactory.getProvider();
       const decoded = await authProvider.verifyToken(tokenValue);

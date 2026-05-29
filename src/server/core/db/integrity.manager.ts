@@ -4,19 +4,39 @@ import { logger } from '../logger/index.js';
 export class IntegrityGuard {
   /**
    * Check if a tenant has reached their employee limit.
+   *
+   * FIX [RLS-500]: db.system() chỉ trả Prisma client thuần — KHÔNG set session variable
+   * app.current_tenant_id. Bảng "tenants" có RLS policy:
+   *   USING (current_setting('app.current_tenant_id', true) = 'SYSTEM')
+   * → db.system() query sẽ bị RLS block → Prisma throw → HTTP 500.
+   *
+   * Giải pháp: dùng db.withTenant('SYSTEM') — luôn chạy trong transaction và
+   * thực thi SET LOCAL app.current_tenant_id = 'SYSTEM' trước mọi query,
+   * đúng theo pattern đã dùng ở auth.middleware.ts và superadmin services.
    */
   static async checkStaffQuota(tenantId: string): Promise<void> {
-    const tenant = await db.system({ readOnly: true }).tenant.findUnique({
-      where: { id: tenantId },
-      select: { maxEmployees: true, paidUsers: true, plan: true, _count: { select: { staff: true } } }
-    });
+    let tenant: {
+      maxEmployees: number;
+      paidUsers: number;
+      plan: string;
+      _count: { staff: number };
+    } | null = null;
+
+    await db.withTenant('SYSTEM', async (tx) => {
+      tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { maxEmployees: true, paidUsers: true, plan: true, _count: { select: { staff: true } } }
+      });
+    }, { readOnly: true });
 
     if (!tenant) throw new Error('TENANT_NOT_FOUND');
 
-    const limit = tenant.plan === 'FREE' ? tenant.maxEmployees : (tenant.paidUsers > 0 ? tenant.paidUsers : tenant.maxEmployees);
+    const limit = (tenant as any).plan === 'FREE'
+      ? (tenant as any).maxEmployees
+      : ((tenant as any).paidUsers > 0 ? (tenant as any).paidUsers : (tenant as any).maxEmployees);
 
-    if (tenant._count.staff >= limit) {
-      logger.warn({ tenantId, max: limit, current: tenant._count.staff }, 'Quota exceeded: staff');
+    if ((tenant as any)._count.staff >= limit) {
+      logger.warn({ tenantId, max: limit, current: (tenant as any)._count.staff }, 'Quota exceeded: staff');
       throw new Error('QUOTA_EXCEEDED: STAFF_LIMIT');
     }
   }

@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useShallow } from "zustand/react/shallow";
-import { Building2, ShieldAlert, BarChart3, ClipboardCheck, ChevronRight, Search, Filter, Download, MoreHorizontal, User, Plus, X, MapPin, FileText, CalendarDays } from "lucide-react";
+import { Building2, ShieldAlert, BarChart3, ClipboardCheck, ChevronRight, Search, Filter, Download, MoreHorizontal, User, X, MapPin, FileText, CalendarDays } from "lucide-react";
 import { FeatureLock } from "../../common/interfaces/components/FeatureLock";
 import { 
-  DashboardPageHeader, DashboardMetricGrid, DashboardMetricCard, DashboardToolbarRow, dashboardInputClass, DashboardSpinner 
+  DashboardPageHeader, DashboardMetricGrid, DashboardMetricCard, DashboardToolbarRow, dashboardInputClass 
 } from "../../common/interfaces/components/DashboardUI";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { opsTableClass, opsThClass, opsTdClass, opsRowClass, OpsStatusBadge, OpsIconButton } from "./components/OpsTableSystem";
@@ -16,12 +16,11 @@ interface VendorTabProps {
 }
 
 export const VendorTab: React.FC<VendorTabProps> = ({ embedded = false }) => {
-  const { isPro, tenantInfo, setShowUpgradeModal, anomalies } = useDashboardStore(
+  const { isPro, tenantInfo, setShowUpgradeModal } = useDashboardStore(
     useShallow((state) => ({
       isPro: state.isPro,
       tenantInfo: state.tenantInfo,
       setShowUpgradeModal: state.setShowUpgradeModal,
-      anomalies: state.anomalies,
     })),
   );
 
@@ -49,12 +48,6 @@ export const VendorTab: React.FC<VendorTabProps> = ({ embedded = false }) => {
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const openCreateDrawer = () => {
-    setDrawerMode('create');
-    setSelectedVendor(null);
-    setIsDrawerOpen(true);
   };
 
   const openViewDrawer = (vendor: any) => {
